@@ -68,28 +68,38 @@ export function decide(user: SessionUser, approvalId: number, decision: Decision
   const entry = apps.find((a) => a.policy.app === approval.app);
   const decidedAt = new Date().toISOString();
 
-  return db.transaction((tx) => {
-    const result = tx
-      .update(approvals)
-      .set({ status: decision, decidedBy: user.id, note, decidedAt })
-      .where(and(eq(approvals.id, approval.id), eq(approvals.status, "pending")))
-      .run();
-    if (result.changes !== 1) throw new ApprovalError(`approval ${approval.id} is no longer pending`);
+  let noLongerPending = false;
+  try {
+    return db.transaction((tx) => {
+      const result = tx
+        .update(approvals)
+        .set({ status: decision, decidedBy: user.id, note, decidedAt })
+        .where(and(eq(approvals.id, approval.id), eq(approvals.status, "pending")))
+        .run();
+      if (result.changes !== 1) {
+        noLongerPending = true;
+        throw new ApprovalError(`approval ${approval.id} is no longer pending`);
+      }
 
-    const decided: Approval = { ...approval, status: decision, decidedBy: user.id, note, decidedAt };
-    entry?.onDecision?.(tx, decided, decision);
+      const decided: Approval = { ...approval, status: decision, decidedBy: user.id, note, decidedAt };
+      entry?.onDecision?.(tx, decided, decision);
 
-    writeAudit(tx, {
-      actorId: user.id,
-      actorRole: approval.requiredRole as Role,
-      action,
-      app: approval.app,
-      entityId: approval.entityId,
-      outcome: "ok",
-      before: { approvalId: approval.id, status: "pending" },
-      after: { approvalId: approval.id, status: decision, note },
-      requestId: newRequestId(),
+      writeAudit(tx, {
+        actorId: user.id,
+        actorRole: approval.requiredRole as Role,
+        action,
+        app: approval.app,
+        entityId: approval.entityId,
+        outcome: "ok",
+        before: { approvalId: approval.id, status: "pending" },
+        after: { approvalId: approval.id, status: decision, note },
+        requestId: newRequestId(),
+      });
+      return decided;
     });
-    return decided;
-  });
+  } catch (err) {
+    // The denied row is written after the rolled-back transaction so it survives.
+    if (noLongerPending) auditDenied(user, approval.app, action, approval.entityId);
+    throw err;
+  }
 }

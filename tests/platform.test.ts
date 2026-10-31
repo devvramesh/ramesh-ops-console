@@ -1,3 +1,5 @@
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -7,6 +9,7 @@ import { decide, requestApproval } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
 import { db, sqlite } from "@/platform/db/client";
+import { DEFAULT_SESSION_SECRET, ensureSessionSecret } from "@/platform/db/reset";
 import { auditEvents } from "@/platform/db/schema";
 import { mutate } from "@/platform/mutate";
 import { can, type SessionUser } from "@/platform/rbac";
@@ -179,6 +182,54 @@ describe("approvals", () => {
     expect(auditCount("notes")).toBe(before + 1);
     expect(() => decide(avery, approvalId, "approved", "changed my mind")).toThrow(/no longer pending/);
     expect(() => decide(user("u_riley"), approvalId, "approved", "me too")).toThrow(/no longer pending/);
-    expect(auditCount("notes")).toBe(before + 1);
+    // Each denied repeat decision is audited outside the rolled-back transaction.
+    expect(auditCount("notes")).toBe(before + 3);
+    const denied = listAuditEvents({ app: "notes", limit: 2 });
+    expect(denied.every((r) => r.outcome === "denied")).toBe(true);
+    expect(denied.map((r) => r.actorId)).toEqual(["u_riley", "u_avery"]);
+  });
+});
+
+describe("db:reset", () => {
+  it("works when the data directory is missing", () => {
+    // Fresh-clone case: data/ is gitignored, and drizzle-kit push can't create it.
+    rmSync("data-fresh-reset", { recursive: true, force: true });
+    try {
+      execSync("npx tsx src/platform/db/reset.ts", {
+        env: { ...process.env, DATABASE_FILE: "data-fresh-reset/app.sqlite" },
+        stdio: "pipe",
+      });
+      expect(existsSync("data-fresh-reset/app.sqlite")).toBe(true);
+    } finally {
+      rmSync("data-fresh-reset", { recursive: true, force: true });
+    }
+  });
+});
+
+describe("ensureSessionSecret", () => {
+  const envFile = "test-session-secret.env";
+
+  it("replaces the placeholder SESSION_SECRET with a random one", () => {
+    writeFileSync(envFile, `AUTH_MODE=dev\nSESSION_SECRET=${DEFAULT_SESSION_SECRET}\n`);
+    try {
+      expect(ensureSessionSecret(envFile)).toBe(true);
+      const text = readFileSync(envFile, "utf8");
+      expect(text).toContain("AUTH_MODE=dev");
+      expect(text).not.toContain(DEFAULT_SESSION_SECRET);
+      expect(text).toMatch(/SESSION_SECRET=[0-9a-f]{64}/);
+    } finally {
+      rmSync(envFile, { force: true });
+    }
+  });
+
+  it("leaves a real secret alone and ignores a missing file", () => {
+    writeFileSync(envFile, "SESSION_SECRET=already-random-hex\n");
+    try {
+      expect(ensureSessionSecret(envFile)).toBe(false);
+      expect(readFileSync(envFile, "utf8")).toContain("already-random-hex");
+    } finally {
+      rmSync(envFile, { force: true });
+    }
+    expect(ensureSessionSecret("missing-env-file.env")).toBe(false);
   });
 });

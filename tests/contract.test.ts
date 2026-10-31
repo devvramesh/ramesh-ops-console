@@ -10,8 +10,12 @@ import { db } from "@/platform/db/client";
 import { SEEDED_USERS } from "@/platform/db/seed";
 import { auditEvents } from "@/platform/db/schema";
 import { piiFields, REDACTED } from "@/platform/redact";
+import { leakyPolicy } from "./fixtures/leaky/policy";
+import { leakyMembers } from "./fixtures/leaky/schema";
 
-const FORBIDDEN = ["db.insert(", "db.update(", "db.delete(", "db.run("];
+const FORBIDDEN = ["db.insert(", "db.update(", "db.delete(", "db.run(", "sqlite.exec(", "sqlite.prepare(", "$client."];
+
+const CODE_FILE = /\.(ts|tsx|js|jsx|mts|mjs)$/;
 
 function walk(dir: string): string[] {
   if (!statSync(dir, { throwIfNoEntry: false })) return [];
@@ -21,15 +25,50 @@ function walk(dir: string): string[] {
   });
 }
 
+/** `file: pattern` for every forbidden raw-write pattern found under `dirs`. */
+export function collectForbiddenWrites(dirs: string[]): string[] {
+  const offenders: string[] = [];
+  for (const file of dirs.flatMap(walk)) {
+    if (!CODE_FILE.test(file)) continue;
+    const text = readFileSync(file, "utf8");
+    for (const needle of FORBIDDEN) if (text.includes(needle)) offenders.push(`${file}: ${needle}`);
+  }
+  return offenders;
+}
+
+const PII_COLUMN_NAME = /(ssn|email|name|document|passport|license|phone|address|account|card|dob|birth)/i;
+
+/** Column names matching the PII heuristic that the policy doesn't declare, checked in both snake_case and camelCase. */
+export function undeclaredPiiColumns(table: Parameters<typeof getTableColumns>[0], declared: readonly string[]): string[] {
+  const declaredNames = new Set(declared);
+  return Object.entries(getTableColumns(table))
+    .filter(
+      ([jsName, col]) =>
+        (PII_COLUMN_NAME.test(col.name) || PII_COLUMN_NAME.test(jsName)) &&
+        !declaredNames.has(col.name) &&
+        !declaredNames.has(jsName),
+    )
+    .map(([, col]) => col.name);
+}
+
 describe("no raw writes outside src/platform", () => {
-  it("src/apps and src/app contain no db.insert/update/delete/run", () => {
-    const offenders: string[] = [];
-    for (const file of [...walk("src/apps"), ...walk("src/app")]) {
-      if (!/\.(ts|tsx)$/.test(file)) continue;
-      const text = readFileSync(file, "utf8");
-      for (const needle of FORBIDDEN) if (text.includes(needle)) offenders.push(`${file}: ${needle}`);
+  it("src/apps and src/app contain no forbidden raw writes", () => {
+    expect(collectForbiddenWrites(["src/apps", "src/app"])).toEqual([]);
+  });
+
+  it("catches the fixture app's forbidden writes", () => {
+    const hits = collectForbiddenWrites(["tests/fixtures"]);
+    for (const needle of FORBIDDEN) {
+      expect(hits.some((h) => h.endsWith(`: ${needle}`)), `scanner misses ${needle}`).toBe(true);
     }
-    expect(offenders).toEqual([]);
+  });
+
+  it("every app directory under src/apps is registered", () => {
+    const registered = new Set(apps.map((a) => a.policy.app));
+    const dirs = readdirSync("src/apps", { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    expect(dirs.filter((d) => !registered.has(d))).toEqual([]);
   });
 });
 
@@ -47,6 +86,10 @@ describe.each(apps.map((entry) => [entry.policy.app, entry] as const))("app %s",
     for (const field of entry.policy.pii) {
       expect(names.has(field), `pii field ${field} is not a column`).toBe(true);
     }
+  });
+
+  it("declares every PII-looking column", () => {
+    expect(undeclaredPiiColumns(entry.table, entry.policy.pii)).toEqual([]);
   });
 
   it("contractWrite adds exactly one redacted audit row", async () => {
@@ -80,5 +123,11 @@ describe.each(apps.map((entry) => [entry.policy.app, entry] as const))("app %s",
         if (pii.has(k) && v != null) expect(v, `${k} is not redacted`).toBe(REDACTED);
       }
     }
+  });
+});
+
+describe("fixture app (tests/fixtures/leaky)", () => {
+  it("flags the undeclared member_ssn column", () => {
+    expect(undeclaredPiiColumns(leakyMembers, leakyPolicy.pii)).toEqual(["member_ssn"]);
   });
 });

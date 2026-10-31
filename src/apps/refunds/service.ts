@@ -152,7 +152,9 @@ export function decideRefund(user: SessionUser | null | undefined, approvalId: n
   const action = decision === "approved" ? "approve" : "reject";
   const approval = getApproval(approvalId);
   if (!approval || approval.app !== APP) {
-    denyUnless(user, action);
+    // A probe at another app's approval is a denied attempt: audit it under the approval's real app.
+    if (approval) auditDenied(user, approval.app, `approval.${decision}`, approval.entityId);
+    else denyUnless(user, action);
     throw new ApprovalError(`approval ${approvalId} not found`);
   }
   denyUnless(user, action, approval.entityId);
