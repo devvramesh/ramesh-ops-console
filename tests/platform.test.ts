@@ -1,3 +1,5 @@
+import { execSync } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -184,5 +186,21 @@ describe("approvals", () => {
     const denied = listAuditEvents({ app: "notes", limit: 2 });
     expect(denied.every((r) => r.outcome === "denied")).toBe(true);
     expect(denied.map((r) => r.actorId)).toEqual(["u_riley", "u_avery"]);
+  });
+});
+
+describe("db:reset", () => {
+  it("works when the data directory is missing", () => {
+    // Fresh-clone case: data/ is gitignored, and drizzle-kit push can't create it.
+    rmSync("data-fresh-reset", { recursive: true, force: true });
+    try {
+      execSync("npx tsx src/platform/db/reset.ts", {
+        env: { ...process.env, DATABASE_FILE: "data-fresh-reset/app.sqlite" },
+        stdio: "pipe",
+      });
+      expect(existsSync("data-fresh-reset/app.sqlite")).toBe(true);
+    } finally {
+      rmSync("data-fresh-reset", { recursive: true, force: true });
+    }
   });
 });

@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { loadEnv } from "../env";
 
@@ -10,6 +10,7 @@ export async function resetDatabase() {
   process.env.DATABASE_FILE = file;
 
   for (const suffix of ["", "-wal", "-shm"]) rmSync(file + suffix, { force: true });
+  mkdirSync(path.dirname(file), { recursive: true });
 
   execSync("npx drizzle-kit push --force", { stdio: "inherit", env: process.env });
 
