@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ import { decide, requestApproval } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
 import { db, sqlite } from "@/platform/db/client";
+import { DEFAULT_SESSION_SECRET, ensureSessionSecret } from "@/platform/db/reset";
 import { auditEvents } from "@/platform/db/schema";
 import { mutate } from "@/platform/mutate";
 import { can, type SessionUser } from "@/platform/rbac";
@@ -202,5 +203,33 @@ describe("db:reset", () => {
     } finally {
       rmSync("data-fresh-reset", { recursive: true, force: true });
     }
+  });
+});
+
+describe("ensureSessionSecret", () => {
+  const envFile = "test-session-secret.env";
+
+  it("replaces the placeholder SESSION_SECRET with a random one", () => {
+    writeFileSync(envFile, `AUTH_MODE=dev\nSESSION_SECRET=${DEFAULT_SESSION_SECRET}\n`);
+    try {
+      expect(ensureSessionSecret(envFile)).toBe(true);
+      const text = readFileSync(envFile, "utf8");
+      expect(text).toContain("AUTH_MODE=dev");
+      expect(text).not.toContain(DEFAULT_SESSION_SECRET);
+      expect(text).toMatch(/SESSION_SECRET=[0-9a-f]{64}/);
+    } finally {
+      rmSync(envFile, { force: true });
+    }
+  });
+
+  it("leaves a real secret alone and ignores a missing file", () => {
+    writeFileSync(envFile, "SESSION_SECRET=already-random-hex\n");
+    try {
+      expect(ensureSessionSecret(envFile)).toBe(false);
+      expect(readFileSync(envFile, "utf8")).toContain("already-random-hex");
+    } finally {
+      rmSync(envFile, { force: true });
+    }
+    expect(ensureSessionSecret("missing-env-file.env")).toBe(false);
   });
 });
