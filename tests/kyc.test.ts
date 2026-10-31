@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { kycCases } from "@/apps/kyc/schema";
 import { claimCase, decideApproval, decideCase, getCase, KycError, listCases } from "@/apps/kyc/service";
 import { createRefund, pendingApprovalFor } from "@/apps/refunds/service";
-import { ApprovalError, getApproval, listApprovals } from "@/platform/approvals";
+import { ApprovalError, getApproval, listApprovals, requestApproval } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
 import { db } from "@/platform/db/client";
@@ -218,6 +218,18 @@ describe("high-risk approval", () => {
     expect(denied.length).toBe(deniedBefore + 1);
     expect(denied[0]).toMatchObject({ actorId: "u_avery", action: "approval.approved", entityId: refund.id, outcome: "denied" });
     expect(getApproval(approval.id)!.status).toBe("pending");
+  });
+
+  it.each(["missing_case", "kyc_005"])("rolls back the approval if case %s is missing or no longer in_review", (entityId) => {
+    const approval = db.transaction((tx) => requestApproval(tx, {
+      app: APP, entityId, action: "approve", requestedBy: "u_jordan", requiredRole: "approver",
+    }));
+    const before = auditCount();
+    const caseBefore = raw(entityId);
+    expect(() => decideApproval(avery(), approval.id, "approved", "verified")).toThrow(/not in_review/);
+    expect(getApproval(approval.id)).toEqual(approval);
+    expect(raw(entityId)).toEqual(caseBefore);
+    expect(auditCount()).toBe(before);
   });
 
   it("a rejected approval leaves the case in_review so the analyst can reject it", () => {
