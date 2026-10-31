@@ -2,6 +2,10 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { Approval, Decision } from "@/platform/approvals";
 import type { Tx } from "@/platform/db/client";
 import type { AppPolicy, SessionUser } from "@/platform/rbac";
+import { refundsPolicy } from "./refunds/policy";
+import { refunds } from "./refunds/schema";
+import { seedRefunds } from "./refunds/seed";
+import { createRefund, onRefundDecision } from "./refunds/service";
 
 export type AppEntry = {
   policy: AppPolicy;
@@ -16,4 +20,22 @@ export type AppEntry = {
 };
 
 // One entry per app. This is the only file apps share.
-export const apps: AppEntry[] = [];
+export const apps: AppEntry[] = [
+  {
+    policy: refundsPolicy,
+    table: refunds,
+    seed: seedRefunds,
+    onDecision: onRefundDecision,
+    contractWrite: {
+      action: "create",
+      run: (user) =>
+        createRefund(user, {
+          customerRef: "cus_contract",
+          customerEmail: "contract.check@example.com",
+          amountCents: 75000,
+          currency: "USD",
+          reason: "contract test",
+        }),
+    },
+  },
+];
