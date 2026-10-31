@@ -13,7 +13,7 @@ import { piiFields, REDACTED } from "@/platform/redact";
 import { leakyPolicy } from "./fixtures/leaky/policy";
 import { leakyMembers } from "./fixtures/leaky/schema";
 
-const FORBIDDEN = ["db.insert(", "db.update(", "db.delete(", "db.run("];
+const FORBIDDEN = ["db.insert(", "db.update(", "db.delete(", "db.run(", "sqlite.exec(", "sqlite.prepare(", "$client."];
 
 const CODE_FILE = /\.(ts|tsx|js|jsx|mts|mjs)$/;
 
@@ -52,13 +52,13 @@ export function undeclaredPiiColumns(table: Parameters<typeof getTableColumns>[0
 }
 
 describe("no raw writes outside src/platform", () => {
-  it("src/apps and src/app contain no db.insert/update/delete/run", () => {
+  it("src/apps and src/app contain no forbidden raw writes", () => {
     expect(collectForbiddenWrites(["src/apps", "src/app"])).toEqual([]);
   });
 
   it("catches the fixture app's forbidden writes", () => {
     const hits = collectForbiddenWrites(["tests/fixtures"]);
-    for (const needle of ["db.insert(", "db.update(", "db.delete(", "db.run("]) {
+    for (const needle of FORBIDDEN) {
       expect(hits.some((h) => h.endsWith(`: ${needle}`)), `scanner misses ${needle}`).toBe(true);
     }
   });
