@@ -10,6 +10,8 @@ import { db } from "@/platform/db/client";
 import { SEEDED_USERS } from "@/platform/db/seed";
 import { auditEvents } from "@/platform/db/schema";
 import { piiFields, REDACTED } from "@/platform/redact";
+import { leakyPolicy } from "./fixtures/leaky/policy";
+import { leakyMembers } from "./fixtures/leaky/schema";
 
 const FORBIDDEN = ["db.insert(", "db.update(", "db.delete(", "db.run("];
 
@@ -32,6 +34,21 @@ export function collectForbiddenWrites(dirs: string[]): string[] {
     for (const needle of FORBIDDEN) if (text.includes(needle)) offenders.push(`${file}: ${needle}`);
   }
   return offenders;
+}
+
+const PII_COLUMN_NAME = /(ssn|email|name|document|passport|license|phone|address|account|card|dob|birth)/i;
+
+/** Column names matching the PII heuristic that the policy doesn't declare, checked in both snake_case and camelCase. */
+export function undeclaredPiiColumns(table: Parameters<typeof getTableColumns>[0], declared: readonly string[]): string[] {
+  const declaredNames = new Set(declared);
+  return Object.entries(getTableColumns(table))
+    .filter(
+      ([jsName, col]) =>
+        (PII_COLUMN_NAME.test(col.name) || PII_COLUMN_NAME.test(jsName)) &&
+        !declaredNames.has(col.name) &&
+        !declaredNames.has(jsName),
+    )
+    .map(([, col]) => col.name);
 }
 
 describe("no raw writes outside src/platform", () => {
@@ -71,6 +88,10 @@ describe.each(apps.map((entry) => [entry.policy.app, entry] as const))("app %s",
     }
   });
 
+  it("declares every PII-looking column", () => {
+    expect(undeclaredPiiColumns(entry.table, entry.policy.pii)).toEqual([]);
+  });
+
   it("contractWrite adds exactly one redacted audit row", async () => {
     const allowed = entry.policy.permissions[entry.contractWrite.action];
     expect(allowed, `contractWrite action ${entry.contractWrite.action} is not in the policy`).toBeTruthy();
@@ -102,5 +123,11 @@ describe.each(apps.map((entry) => [entry.policy.app, entry] as const))("app %s",
         if (pii.has(k) && v != null) expect(v, `${k} is not redacted`).toBe(REDACTED);
       }
     }
+  });
+});
+
+describe("fixture app (tests/fixtures/leaky)", () => {
+  it("flags the undeclared member_ssn column", () => {
+    expect(undeclaredPiiColumns(leakyMembers, leakyPolicy.pii)).toEqual(["member_ssn"]);
   });
 });
