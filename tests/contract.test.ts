@@ -13,6 +13,8 @@ import { piiFields, REDACTED } from "@/platform/redact";
 
 const FORBIDDEN = ["db.insert(", "db.update(", "db.delete(", "db.run("];
 
+const CODE_FILE = /\.(ts|tsx|js|jsx|mts|mjs)$/;
+
 function walk(dir: string): string[] {
   if (!statSync(dir, { throwIfNoEntry: false })) return [];
   return readdirSync(dir).flatMap((name) => {
@@ -21,15 +23,35 @@ function walk(dir: string): string[] {
   });
 }
 
+/** `file: pattern` for every forbidden raw-write pattern found under `dirs`. */
+export function collectForbiddenWrites(dirs: string[]): string[] {
+  const offenders: string[] = [];
+  for (const file of dirs.flatMap(walk)) {
+    if (!CODE_FILE.test(file)) continue;
+    const text = readFileSync(file, "utf8");
+    for (const needle of FORBIDDEN) if (text.includes(needle)) offenders.push(`${file}: ${needle}`);
+  }
+  return offenders;
+}
+
 describe("no raw writes outside src/platform", () => {
   it("src/apps and src/app contain no db.insert/update/delete/run", () => {
-    const offenders: string[] = [];
-    for (const file of [...walk("src/apps"), ...walk("src/app")]) {
-      if (!/\.(ts|tsx)$/.test(file)) continue;
-      const text = readFileSync(file, "utf8");
-      for (const needle of FORBIDDEN) if (text.includes(needle)) offenders.push(`${file}: ${needle}`);
+    expect(collectForbiddenWrites(["src/apps", "src/app"])).toEqual([]);
+  });
+
+  it("catches the fixture app's forbidden writes", () => {
+    const hits = collectForbiddenWrites(["tests/fixtures"]);
+    for (const needle of ["db.insert(", "db.update(", "db.delete(", "db.run("]) {
+      expect(hits.some((h) => h.endsWith(`: ${needle}`)), `scanner misses ${needle}`).toBe(true);
     }
-    expect(offenders).toEqual([]);
+  });
+
+  it("every app directory under src/apps is registered", () => {
+    const registered = new Set(apps.map((a) => a.policy.app));
+    const dirs = readdirSync("src/apps", { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    expect(dirs.filter((d) => !registered.has(d))).toEqual([]);
   });
 });
 
