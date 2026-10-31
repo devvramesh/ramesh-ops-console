@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import { eq, sql } from "drizzle-orm";
 import { db, sqlite } from "@/platform/db/client";
 import type { SessionUser } from "@/platform/rbac";
@@ -32,4 +33,17 @@ export function preparedWrite() {
 
 export function clientWrite() {
   db.$client.exec("DELETE FROM leaky_members");
+}
+
+export function transactionWrite() {
+  db.transaction((tx) => tx.delete(leakyMembers).run());
+}
+
+export function driverWrite() {
+  const connection = new Database(":memory:");
+  try {
+    connection.exec("CREATE TABLE bypass (id INTEGER)");
+  } finally {
+    connection.close();
+  }
 }
