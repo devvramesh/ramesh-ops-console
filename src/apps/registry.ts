@@ -2,6 +2,10 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { Approval, Decision } from "@/platform/approvals";
 import type { Tx } from "@/platform/db/client";
 import type { AppPolicy, SessionUser } from "@/platform/rbac";
+import { kycPolicy } from "./kyc/policy";
+import { kycCases } from "./kyc/schema";
+import { seedKyc } from "./kyc/seed";
+import { contractClaim, onKycDecision } from "./kyc/service";
 import { refundsPolicy } from "./refunds/policy";
 import { refunds } from "./refunds/schema";
 import { seedRefunds } from "./refunds/seed";
@@ -37,5 +41,12 @@ export const apps: AppEntry[] = [
           reason: "contract test",
         }),
     },
+  },
+  {
+    policy: kycPolicy,
+    table: kycCases,
+    seed: seedKyc,
+    onDecision: onKycDecision,
+    contractWrite: { action: "claim", run: contractClaim },
   },
 ];
