@@ -48,6 +48,7 @@ describe("threshold", () => {
     const rows = listAuditEvents({ app: "refunds", entityId: refund.id });
     expect(rows.map((r) => r.action).sort()).toEqual(["create", "refund.auto_approved"]);
     const auto = rows.find((r) => r.action === "refund.auto_approved")!;
+    expect(auto.beforeJson).toBeNull();
     expect(JSON.parse(auto.afterJson!)).toMatchObject({ status: "approved", thresholdCents: 50000, amountCents: 50000 });
     expect(auto.actorRole).toBe("support");
     expectRedacted(rows);
