@@ -136,7 +136,9 @@ describe("decisions", () => {
     expect(auditCount()).toBe(before + 1);
     expect(() => decideRefund(avery, approval.id, "approved", "changed my mind")).toThrow(/no longer pending/);
     expect(() => decideRefund(user("u_riley"), approval.id, "approved", "me too")).toThrow(ApprovalError);
-    expect(auditCount()).toBe(before + 1);
+    // Each denied repeat decision is audited outside the rolled-back transaction.
+    expect(auditCount()).toBe(before + 3);
+    expect(listAuditEvents({ app: "refunds", limit: 2 }).every((r) => r.outcome === "denied")).toBe(true);
     expect(getRefund(avery, refund.id)?.status).toBe("rejected");
   });
 

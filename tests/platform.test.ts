@@ -179,6 +179,10 @@ describe("approvals", () => {
     expect(auditCount("notes")).toBe(before + 1);
     expect(() => decide(avery, approvalId, "approved", "changed my mind")).toThrow(/no longer pending/);
     expect(() => decide(user("u_riley"), approvalId, "approved", "me too")).toThrow(/no longer pending/);
-    expect(auditCount("notes")).toBe(before + 1);
+    // Each denied repeat decision is audited outside the rolled-back transaction.
+    expect(auditCount("notes")).toBe(before + 3);
+    const denied = listAuditEvents({ app: "notes", limit: 2 });
+    expect(denied.every((r) => r.outcome === "denied")).toBe(true);
+    expect(denied.map((r) => r.actorId)).toEqual(["u_riley", "u_avery"]);
   });
 });

@@ -201,7 +201,9 @@ describe("high-risk approval", () => {
 
     expect(() => decideApproval(avery(), approvalId, "rejected", "undo")).toThrow(/no longer pending/);
     expect(() => decideApproval(user("u_riley"), approvalId, "approved", "me too")).toThrow(/no longer pending/);
-    expect(auditCount()).toBe(before + 1);
+    // Each denied repeat decision is audited outside the rolled-back transaction.
+    expect(auditCount()).toBe(before + 3);
+    expect(listAuditEvents({ app: APP, limit: 2 }).every((r) => r.outcome === "denied")).toBe(true);
     expect(raw("kyc_004").status).toBe("approved");
   });
 
