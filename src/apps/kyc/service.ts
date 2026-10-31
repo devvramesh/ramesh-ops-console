@@ -149,11 +149,11 @@ export function decideApproval(user: SessionUser | null | undefined, approvalId:
 
 /** Registry hook. Runs inside decide()'s transaction. */
 export function onKycDecision(tx: Tx, approval: Approval, decision: Decision) {
-  if (decision !== "approved") return;
-  tx.update(kycCases)
-    .set({ status: "approved", updatedAt: new Date().toISOString() })
+  const result = tx.update(kycCases)
+    .set({ status: decision === "approved" ? "approved" : "in_review", updatedAt: new Date().toISOString() })
     .where(and(eq(kycCases.id, approval.entityId), eq(kycCases.status, "in_review")))
     .run();
+  if (result.changes !== 1) throw new KycError(`case ${approval.entityId} is not in_review`);
 }
 
 /** One permitted write for tests/contract.test.ts: claim the oldest unclaimed case. */

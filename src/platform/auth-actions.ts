@@ -6,7 +6,7 @@ import { devSwitcherEnabled, encodeSession, loadUser, SESSION_COOKIE, sessionCoo
 
 function safeReturnTo(value: FormDataEntryValue | null) {
   const s = typeof value === "string" ? value : "/";
-  return s.startsWith("/") && !s.startsWith("//") ? s : "/";
+  return s.startsWith("/") && !s.startsWith("//") && !/[\\\u0000-\u001f\u007f]/.test(s) ? s : "/";
 }
 
 export async function switchUser(formData: FormData) {

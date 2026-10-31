@@ -13,7 +13,7 @@ import { piiFields, REDACTED } from "@/platform/redact";
 import { leakyPolicy } from "./fixtures/leaky/policy";
 import { leakyMembers } from "./fixtures/leaky/schema";
 
-const FORBIDDEN = ["db.insert(", "db.update(", "db.delete(", "db.run(", "sqlite.exec(", "sqlite.prepare(", "$client."];
+const FORBIDDEN = ["db.insert(", "db.update(", "db.delete(", "db.run(", "db.transaction(", "sqlite.exec(", "sqlite.prepare(", "$client.", "better-sqlite3"];
 
 const CODE_FILE = /\.(ts|tsx|js|jsx|mts|mjs)$/;
 

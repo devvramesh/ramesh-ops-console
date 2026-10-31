@@ -137,7 +137,7 @@ export function createRefund(user: SessionUser | null | undefined, input: Create
           app: APP,
           entityId: row.id,
           outcome: "ok",
-          before: { id: row.id, status: "pending_approval" },
+          before: null,
           after: { id: row.id, status: "approved", amountCents: row.amountCents, thresholdCents: APPROVAL_THRESHOLD_CENTS },
           requestId,
         });

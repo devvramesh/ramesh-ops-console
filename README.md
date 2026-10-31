@@ -1,6 +1,6 @@
 # ramesh-ops-console
 
-## what this is
+## What this is
 
 A feasibility prototype built with Devin to compare code-built internal tools against Power Apps. It holds a shared governed platform and two apps, Refunds and KYC review, on Next.js 16 and SQLite.
 
@@ -77,10 +77,12 @@ Open http://localhost:3000. The header switcher signs in as one of seven seeded 
   - every column matching the PII-name heuristic is declared in `policy.pii`
   - `contractWrite` by a permitted seeded user adds exactly one audit row
   - no seeded PII value appears in audit JSON
-  - no `db.insert(`, `db.update(`, `db.delete(`, `db.run(`, `sqlite.exec(`, `sqlite.prepare(`, or `$client.` under `src/apps` or `src/app`
+  - no `db.insert(`, `db.update(`, `db.delete(`, `db.run(`, `db.transaction(`, `sqlite.exec(`, `sqlite.prepare(`, `$client.`, or imports of `better-sqlite3` under `src/apps` or `src/app`
   - every app directory under `src/apps` is registered
   - the fixture app under `tests/fixtures` stays caught by these checks
 - `tests/refunds.test.ts`, `tests/kyc.test.ts`: service-level cases for each app.
+- `tests/actions.test.ts`, `tests/auth-actions.test.ts`: decision input validation and same-origin return paths.
+- `tests/kyc-page.test.ts`: one PII-free `read_pii` audit row per KYC detail load.
 
 ## How it was built
 
@@ -92,12 +94,7 @@ Open http://localhost:3000. The header switcher signs in as one of seven seeded 
 - The triggers in `src/platform/db/triggers.sql` stop app code, not a person holding the SQLite file.
 - No compliance evidence. Nothing here is an audit artifact.
 - No idempotency key on create. Submitting `/refunds/new` twice makes two refunds.
-- A decision form value that isn't `rejected` decides `approved` (`src/apps/refunds/actions.ts`, `src/apps/kyc/actions.ts`).
-- `safeReturnTo` accepts backslash paths like `/\evil.com`, which browsers read as protocol-relative. Dev switcher only.
-- `decide()` trusts the `requiredRole` stored on the approval row, not the app's `policy.approval.requiredRole`.
-- An approval for an app missing from the registry decides silently: no `onDecision` hook runs.
-- `onKycDecision` doesn't check that its case update changed a row (refunds throws on the same condition).
-- `refund.auto_approved` audit rows carry a fabricated `pending_approval` before-state that never existed.
+- Decision notes are free text and are not redacted.
 - `npm audit` reports ~20 moderate findings, all in dev tooling (eslint/minimatch, drizzle-kit's bundled esbuild). Runtime deps are clean.
 - PII masking lives in page components; `service.ts` reads return raw PII, so a new list page that skips `maskEmail`/`maskName`/`maskDocument` would leak it.
 - USD only. `currency` must be `"USD"`.

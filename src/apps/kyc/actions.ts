@@ -26,11 +26,12 @@ export async function claimAction(formData: FormData) {
 
 export async function decideCaseAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
-  const decision = formData.get("decision") === "rejected" ? "rejected" : "approved";
+  const decision = formData.get("decision");
   const note = String(formData.get("note") ?? "");
   const user = await getSession();
   let error: string | undefined;
   try {
+    if (decision !== "approved" && decision !== "rejected") throw new Error("Invalid decision");
     decideCase(user, id, decision, note);
   } catch (err) {
     error = message(err);
@@ -41,11 +42,12 @@ export async function decideCaseAction(formData: FormData) {
 export async function decideApprovalAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const approvalId = Number(formData.get("approvalId"));
-  const decision = formData.get("decision") === "rejected" ? "rejected" : "approved";
+  const decision = formData.get("decision");
   const note = String(formData.get("note") ?? "");
   const user = await getSession();
   let error: string | undefined;
   try {
+    if (decision !== "approved" && decision !== "rejected") throw new Error("Invalid decision");
     decideApproval(user, approvalId, decision, note);
   } catch (err) {
     error = message(err);

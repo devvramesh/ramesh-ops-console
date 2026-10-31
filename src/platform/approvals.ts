@@ -55,17 +55,26 @@ export function decide(user: SessionUser, approvalId: number, decision: Decision
   const approval = getApproval(approvalId);
   if (!approval) throw new ApprovalError(`approval ${approvalId} not found`);
   const action = `approval.${decision}`;
+  const entry = apps.find((a) => a.policy.app === approval.app);
+  if (!entry) {
+    auditDenied(user, approval.app, action, approval.entityId);
+    throw new ApprovalError(`app ${approval.app} is not registered`);
+  }
+  const requiredRole = entry.policy.approval?.requiredRole;
+  if (!requiredRole) {
+    auditDenied(user, approval.app, action, approval.entityId);
+    throw new ApprovalError(`app ${approval.app} has no approval policy`);
+  }
 
   if (approval.requestedBy === user.id) {
     auditDenied(user, approval.app, action, approval.entityId);
     throw new ApprovalError(`user ${user.id} requested approval ${approval.id} and cannot decide it`);
   }
-  if (!user.roles.includes(approval.requiredRole as Role)) {
+  if (!user.roles.includes(requiredRole)) {
     auditDenied(user, approval.app, action, approval.entityId);
-    throw new ApprovalError(`user ${user.id} lacks role ${approval.requiredRole} for approval ${approval.id}`);
+    throw new ApprovalError(`user ${user.id} lacks role ${requiredRole} for approval ${approval.id}`);
   }
 
-  const entry = apps.find((a) => a.policy.app === approval.app);
   const decidedAt = new Date().toISOString();
 
   let noLongerPending = false;
@@ -82,11 +91,11 @@ export function decide(user: SessionUser, approvalId: number, decision: Decision
       }
 
       const decided: Approval = { ...approval, status: decision, decidedBy: user.id, note, decidedAt };
-      entry?.onDecision?.(tx, decided, decision);
+      entry.onDecision?.(tx, decided, decision);
 
       writeAudit(tx, {
         actorId: user.id,
-        actorRole: approval.requiredRole as Role,
+        actorRole: requiredRole,
         action,
         app: approval.app,
         entityId: approval.entityId,

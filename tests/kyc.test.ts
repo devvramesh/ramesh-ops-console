@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { kycCases } from "@/apps/kyc/schema";
 import { claimCase, decideApproval, decideCase, getCase, KycError, listCases } from "@/apps/kyc/service";
 import { createRefund, pendingApprovalFor } from "@/apps/refunds/service";
-import { ApprovalError, getApproval, listApprovals } from "@/platform/approvals";
+import { ApprovalError, getApproval, listApprovals, requestApproval } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
 import { db } from "@/platform/db/client";
@@ -220,10 +220,35 @@ describe("high-risk approval", () => {
     expect(getApproval(approval.id)!.status).toBe("pending");
   });
 
-  it("a rejected approval leaves the case in_review so the analyst can reject it", () => {
+  it.each([
+    ["missing_case", "approved"], ["kyc_005", "approved"],
+    ["missing_case", "rejected"], ["kyc_005", "rejected"],
+  ] as const)("rolls back when case %s cannot be updated for an approval decision of %s", (entityId, decision) => {
+    const approval = db.transaction((tx) => requestApproval(tx, {
+      app: APP, entityId, action: "approve", requestedBy: "u_jordan", requiredRole: "approver",
+    }));
+    const before = auditCount();
+    const caseBefore = raw(entityId);
+    expect(() => decideApproval(avery(), approval.id, decision, "verified")).toThrow(/not in_review/);
+    expect(getApproval(approval.id)).toEqual(approval);
+    expect(raw(entityId)).toEqual(caseBefore);
+    expect(auditCount()).toBe(before);
+  });
+
+  it("returns a rejected high-risk approval to the same analyst in_review and audits the rejection note", () => {
     const approvalId = listApprovals({ app: APP, entityId: "kyc_006", status: "pending" })[0].id;
-    expect(decideApproval(avery(), approvalId, "rejected", "source of funds unclear").status).toBe("rejected");
-    expect(raw("kyc_006").status).toBe("in_review");
+    db.update(kycCases).set({ updatedAt: "2020-01-01T00:00:00.000Z" }).where(eq(kycCases.id, "kyc_006")).run();
+    const caseBefore = raw("kyc_006");
+    const before = auditCount();
+    const note = "source of funds unclear";
+    expect(decideApproval(avery(), approvalId, "rejected", note)).toMatchObject({ status: "rejected", note });
+    expect(raw("kyc_006")).toMatchObject({ status: "in_review", assignee: caseBefore.assignee });
+    expect(raw("kyc_006").updatedAt).not.toBe(caseBefore.updatedAt);
+    expect(listApprovals({ app: APP, entityId: "kyc_006", status: "pending" })).toEqual([]);
+    expect(auditCount()).toBe(before + 1);
+    const audit = latestAudit();
+    expect(audit).toMatchObject({ actorId: "u_avery", action: "approval.rejected", entityId: "kyc_006", outcome: "ok" });
+    expect(JSON.parse(audit.afterJson!)).toEqual({ approvalId, status: "rejected", note });
     expect(decideCase(jordan(), "kyc_006", "rejected", "approver declined").status).toBe("rejected");
   });
 });

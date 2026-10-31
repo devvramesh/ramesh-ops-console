@@ -5,7 +5,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { apps, type AppEntry } from "@/apps/registry";
-import { decide, requestApproval } from "@/platform/approvals";
+import { approvals, decide, getApproval, requestApproval } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
 import { db, sqlite } from "@/platform/db/client";
@@ -134,6 +134,17 @@ describe("audit_events is append-only", () => {
 });
 
 describe("approvals", () => {
+  it("rejects an approval for an unregistered app without deciding it", () => {
+    const approval = db.transaction((tx) => requestApproval(tx, {
+      app: "fake_unregistered_app", entityId: "fake_entity", action: "close", requestedBy: "u_sam", requiredRole: "approver",
+    }));
+    expect(() => decide(user("u_avery"), approval.id, "approved", "ok")).toThrow(/not registered/);
+    expect(getApproval(approval.id)).toEqual(approval);
+    expect(listAuditEvents({ app: approval.app })).toEqual([
+      expect.objectContaining({ actorId: "u_avery", action: "approval.approved", outcome: "denied", entityId: approval.entityId }),
+    ]);
+  });
+
   function requestClose(requester: SessionUser) {
     const note = createNote(user("u_sam"));
     let approvalId = 0;
@@ -172,6 +183,31 @@ describe("approvals", () => {
     const approvalId = requestClose(user("u_sam"));
     expect(() => decide(user("u_casey"), approvalId, "approved", "admin says yes")).toThrow(/lacks role/);
     expect(listAuditEvents({ app: "notes" })[0]).toMatchObject({ actorId: "u_casey", outcome: "denied" });
+  });
+
+  it("enforces the policy role even when the approval row's requiredRole is tampered with", () => {
+    const approvalId = requestClose(user("u_sam"));
+    db.update(approvals).set({ requiredRole: "analyst" }).where(eq(approvals.id, approvalId)).run();
+    const before = getApproval(approvalId);
+    expect(() => decide(user("u_jordan"), approvalId, "approved", "tampered role")).toThrow(/lacks role approver/);
+    expect(getApproval(approvalId)).toEqual(before);
+    expect(listAuditEvents({ app: "notes" })[0]).toMatchObject({ actorId: "u_jordan", outcome: "denied" });
+    expect(decide(user("u_avery"), approvalId, "approved", "policy role").status).toBe("approved");
+    expect(listAuditEvents({ app: "notes" })[0]).toMatchObject({ actorId: "u_avery", actorRole: "approver", outcome: "ok" });
+  });
+
+  it("fails closed if a registered app has no approval policy", () => {
+    const approvalId = requestClose(user("u_sam"));
+    const policy = fixture.policy.approval;
+    const before = getApproval(approvalId);
+    try {
+      delete fixture.policy.approval;
+      expect(() => decide(user("u_avery"), approvalId, "approved", "no policy")).toThrow(/no approval policy/);
+      expect(getApproval(approvalId)).toEqual(before);
+      expect(listAuditEvents({ app: "notes" })[0]).toMatchObject({ actorId: "u_avery", outcome: "denied" });
+    } finally {
+      fixture.policy.approval = policy;
+    }
   });
 
   it("fails when deciding twice", () => {
