@@ -42,9 +42,10 @@ export async function decideRefundAction(formData: FormData) {
   const user = await getSession();
   const refundId = text(formData, "refundId");
   const approvalId = Number(text(formData, "approvalId"));
-  const decision = text(formData, "decision") === "rejected" ? "rejected" : "approved";
+  const decision = text(formData, "decision");
   let target = `/refunds/${refundId}`;
   try {
+    if (decision !== "approved" && decision !== "rejected") throw new Error("Invalid decision");
     decideRefund(user, approvalId, decision, text(formData, "note"));
   } catch (err) {
     target = withError(target, errorMessage(err));
