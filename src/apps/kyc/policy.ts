@@ -6,6 +6,7 @@ export const kycPolicy: AppPolicy = {
   description: "Identity verification cases. Analysts claim and decide; high-risk approvals need an approver.",
   permissions: {
     read: ["analyst", "approver", "auditor"],
+    read_pii: ["analyst", "approver", "auditor"],
     claim: ["analyst"],
     approve: ["analyst"],
     reject: ["analyst"],

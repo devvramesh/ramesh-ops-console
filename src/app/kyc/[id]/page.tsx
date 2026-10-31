@@ -4,6 +4,7 @@ import { claimAction, decideApprovalAction, decideCaseAction } from "@/apps/kyc/
 import { kycPolicy } from "@/apps/kyc/policy";
 import { caseApprovals, caseAudit, getCase } from "@/apps/kyc/service";
 import { AuditTable } from "@/components/AuditTable";
+import { recordAccess } from "@/platform/audit";
 import { getSession } from "@/platform/auth";
 import { can } from "@/platform/rbac";
 import { CaseStatusBadge, RiskBadge } from "../ui";
@@ -26,6 +27,7 @@ export default async function KycCasePage({ params, searchParams }: PageProps<"/
   const { error } = await searchParams;
   const row = getCase(user, id);
   if (!row) notFound();
+  recordAccess(user, { app: kycPolicy.app, action: "read_pii", entityId: id });
 
   const approvals = caseApprovals(user, id);
   const pending = approvals.find((a) => a.status === "pending");
