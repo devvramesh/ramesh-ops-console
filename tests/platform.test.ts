@@ -5,7 +5,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { apps, type AppEntry } from "@/apps/registry";
-import { decide, requestApproval } from "@/platform/approvals";
+import { decide, getApproval, requestApproval } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
 import { db, sqlite } from "@/platform/db/client";
@@ -134,6 +134,17 @@ describe("audit_events is append-only", () => {
 });
 
 describe("approvals", () => {
+  it("rejects an approval for an unregistered app without deciding it", () => {
+    const approval = db.transaction((tx) => requestApproval(tx, {
+      app: "fake_unregistered_app", entityId: "fake_entity", action: "close", requestedBy: "u_sam", requiredRole: "approver",
+    }));
+    expect(() => decide(user("u_avery"), approval.id, "approved", "ok")).toThrow(/not registered/);
+    expect(getApproval(approval.id)).toEqual(approval);
+    expect(listAuditEvents({ app: approval.app })).toEqual([
+      expect.objectContaining({ actorId: "u_avery", action: "approval.approved", outcome: "denied", entityId: approval.entityId }),
+    ]);
+  });
+
   function requestClose(requester: SessionUser) {
     const note = createNote(user("u_sam"));
     let approvalId = 0;
