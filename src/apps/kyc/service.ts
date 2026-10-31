@@ -149,9 +149,8 @@ export function decideApproval(user: SessionUser | null | undefined, approvalId:
 
 /** Registry hook. Runs inside decide()'s transaction. */
 export function onKycDecision(tx: Tx, approval: Approval, decision: Decision) {
-  if (decision !== "approved") return;
   const result = tx.update(kycCases)
-    .set({ status: "approved", updatedAt: new Date().toISOString() })
+    .set({ status: decision === "approved" ? "approved" : "in_review", updatedAt: new Date().toISOString() })
     .where(and(eq(kycCases.id, approval.entityId), eq(kycCases.status, "in_review")))
     .run();
   if (result.changes !== 1) throw new KycError(`case ${approval.entityId} is not in_review`);
