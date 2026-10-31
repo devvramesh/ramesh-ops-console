@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { approvals, decide, listApprovals, requestApproval, type Approval, type Decision } from "@/platform/approvals";
+import { approvals, decide, getApproval, listApprovals, requestApproval, type Approval, type Decision } from "@/platform/approvals";
 import { AccessDeniedError, auditDenied, listAuditEvents } from "@/platform/audit";
 import { db, type Tx } from "@/platform/db/client";
 import { mutate } from "@/platform/mutate";
@@ -137,8 +137,12 @@ export function decideCase(user: SessionUser | null | undefined, id: string, dec
 /** An approver decides the pending high-risk approval. decide() enforces role, self-approval, and decide-once. */
 export function decideApproval(user: SessionUser | null | undefined, approvalId: number, decision: Decision, note: string): Approval {
   const parsedNote = noteSchema.parse(note);
-  const approval = listApprovals({ app: APP }).find((a) => a.id === approvalId);
-  if (!approval) throw new KycError(`approval ${approvalId} not found`);
+  const approval = getApproval(approvalId);
+  if (!approval || approval.app !== APP) {
+    // A probe at another app's approval is a denied attempt: audit it under the approval's real app.
+    if (approval) auditDenied(user, approval.app, `approval.${decision}`, approval.entityId);
+    throw new KycError(`approval ${approvalId} not found`);
+  }
   if (!user) deny(user, `approval.${decision}`, approval.entityId);
   return decide(user, approvalId, decision, parsedNote);
 }

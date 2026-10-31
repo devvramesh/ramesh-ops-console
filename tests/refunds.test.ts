@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { claimCase, decideCase } from "@/apps/kyc/service";
 import { createRefund, decideRefund, dollarsToCents, getRefund, listRefunds, payRefund, pendingApprovalFor } from "@/apps/refunds/service";
-import { ApprovalError } from "@/platform/approvals";
+import { ApprovalError, getApproval, listApprovals } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
 import { db } from "@/platform/db/client";
@@ -140,6 +141,19 @@ describe("decisions", () => {
     expect(auditCount()).toBe(before + 3);
     expect(listAuditEvents({ app: "refunds", limit: 2 }).every((r) => r.outcome === "denied")).toBe(true);
     expect(getRefund(avery, refund.id)?.status).toBe("rejected");
+  });
+
+  it("audits a decision attempt on another app's approval", () => {
+    // A high-risk case approval probed through the refunds path is denied and audited under kyc.
+    claimCase(user("u_jordan"), "kyc_012");
+    decideCase(user("u_jordan"), "kyc_012", "approved", "looks fine");
+    const kycApproval = listApprovals({ app: "kyc", entityId: "kyc_012", status: "pending" })[0];
+    const deniedBefore = listAuditEvents({ app: "kyc" }).filter((r) => r.outcome === "denied").length;
+    expect(() => decideRefund(user("u_avery"), kycApproval.id, "approved", "wrong app")).toThrow(ApprovalError);
+    const denied = listAuditEvents({ app: "kyc" }).filter((r) => r.outcome === "denied");
+    expect(denied.length).toBe(deniedBefore + 1);
+    expect(denied[0]).toMatchObject({ actorId: "u_avery", action: "approval.approved", entityId: "kyc_012", outcome: "denied" });
+    expect(getApproval(kycApproval.id)!.status).toBe("pending");
   });
 
   it("every transition writes an audit row with customer_email redacted", async () => {

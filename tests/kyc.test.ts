@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 import { kycCases } from "@/apps/kyc/schema";
 import { claimCase, decideApproval, decideCase, getCase, KycError, listCases } from "@/apps/kyc/service";
-import { ApprovalError, listApprovals } from "@/platform/approvals";
+import { createRefund, pendingApprovalFor } from "@/apps/refunds/service";
+import { ApprovalError, getApproval, listApprovals } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
 import { db } from "@/platform/db/client";
@@ -205,6 +206,18 @@ describe("high-risk approval", () => {
     expect(auditCount()).toBe(before + 3);
     expect(listAuditEvents({ app: APP, limit: 2 }).every((r) => r.outcome === "denied")).toBe(true);
     expect(raw("kyc_004").status).toBe("approved");
+  });
+
+  it("audits a decision attempt on a refunds approval", () => {
+    // A refunds approval probed through the KYC path is denied and audited under refunds.
+    const refund = createRefund(sam(), { customerRef: "cus_probe", customerEmail: "probe@example.com", amountCents: 60000, currency: "USD", reason: "probe" });
+    const approval = pendingApprovalFor(refund.id)!;
+    const deniedBefore = listAuditEvents({ app: "refunds" }).filter((r) => r.outcome === "denied").length;
+    expect(() => decideApproval(avery(), approval.id, "approved", "wrong app")).toThrow(KycError);
+    const denied = listAuditEvents({ app: "refunds" }).filter((r) => r.outcome === "denied");
+    expect(denied.length).toBe(deniedBefore + 1);
+    expect(denied[0]).toMatchObject({ actorId: "u_avery", action: "approval.approved", entityId: refund.id, outcome: "denied" });
+    expect(getApproval(approval.id)!.status).toBe("pending");
   });
 
   it("a rejected approval leaves the case in_review so the analyst can reject it", () => {
