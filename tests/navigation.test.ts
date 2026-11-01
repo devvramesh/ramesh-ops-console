@@ -20,6 +20,21 @@ function render(pathname: string) {
 }
 
 describe("sidebar navigation", () => {
+  it("separates the signed-in name, readable roles, and Demo control", () => {
+    const user = { id: "riley", name: "Riley", roles: ["approver", "support"] as const };
+    const html = renderToStaticMarkup(createElement(NavRail, {
+      items,
+      user: { ...user, roles: [...user.roles] },
+      users: [],
+      devSwitcher: true,
+    }));
+    expect(html).toContain("flex min-w-0 flex-1 flex-col gap-1");
+    expect(html).toMatch(/Riley<\/span>/);
+    expect(html).toContain("Approver · Support</span>");
+    expect(html).toContain('class="shrink-0"');
+    expect(html).toContain("Demo");
+  });
+
   it.each([
     ["/", "/"],
     ["/refunds", "/refunds"],

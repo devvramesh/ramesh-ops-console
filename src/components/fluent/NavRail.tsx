@@ -91,18 +91,24 @@ export function NavRail({
           );
         })}
       </div>
-      <div className="flex items-center justify-between gap-2 px-3 py-3">
+      <div className="flex items-center justify-between gap-3 border-t border-neutral-200 px-3 py-3">
         {user ? (
-          <div className="min-w-0">
-            <Text size={200} className="block truncate">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <Text size={200} weight="semibold" className="truncate">
               {user.name}
             </Text>
-            <Caption1 className="block truncate text-neutral-500">{user.roles.join(", ")}</Caption1>
+            <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+              {user.roles.map((role) => role.charAt(0).toUpperCase() + role.slice(1)).join(" · ")}
+            </Caption1>
           </div>
         ) : (
           <Caption1 className="text-neutral-500">Not signed in</Caption1>
         )}
-        {devSwitcher && <DemoMenu users={users} currentUserId={user?.id ?? ""} />}
+        {devSwitcher && (
+          <div className="shrink-0">
+            <DemoMenu users={users} currentUserId={user?.id ?? ""} />
+          </div>
+        )}
       </div>
     </nav>
   );
