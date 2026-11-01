@@ -16,7 +16,7 @@ A PR that breaks one of these doesn't merge.
 9. All data is synthetic. Never connect to a real service. External systems are stubs behind interfaces in `src/platform/integrations/`.
 
 ## Stack
-- Next.js 16 (App Router), TypeScript strict, Drizzle ORM on SQLite (better-sqlite3), Zod, Vitest, Tailwind. No component library. Node 22 LTS.
+- Next.js 16 (App Router), TypeScript strict, Drizzle ORM on SQLite (better-sqlite3), Zod, Vitest, Tailwind, Fluent UI React v9 (the one component library; components live under `src/components/fluent/`). Node 22 LTS.
 - Docs for the installed Next.js version are in `node_modules/next/dist/docs/`. Read the relevant page before using a Next.js API. `cookies()`, `headers()`, `params`, and `searchParams` are async.
 - `next.config.ts` sets `agentRules: false` so `next dev` doesn't edit this file.
 - better-sqlite3 transactions are synchronous. Inside `db.transaction((tx) => ...)` use `.run()`, `.get()`, `.all()`, never `async` or `await`. Do async work, such as calling an integration stub, before `mutate()`.
