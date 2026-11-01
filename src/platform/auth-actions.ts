@@ -11,8 +11,8 @@ function safeReturnTo(value: FormDataEntryValue | null) {
 
 export async function switchUser(formData: FormData) {
   if (!devSwitcherEnabled()) throw new Error("dev sign-in is disabled: requires AUTH_MODE=dev and NODE_ENV != production");
-  const userId = String(formData.get("userId") ?? "");
-  if (!loadUser(userId)) throw new Error(`unknown user id ${userId}`);
+  const userId = formData.get("userId");
+  if (typeof userId !== "string" || !loadUser(userId)) return;
   (await cookies()).set(SESSION_COOKIE, encodeSession(userId), sessionCookieOptions());
   redirect(safeReturnTo(formData.get("returnTo")));
 }
