@@ -158,7 +158,7 @@ After the two-hour build I added these to prepare the client demo, outside the t
 | --- | --- | --- | --- |
 | #7 | Database safeguards on approvals, CODEOWNERS, CI, and the Fluent UI restyle | Nov 1, 2026, 9:07 PM | Nov 1, 2026, 9:13 PM |
 | TBD | Feature-flags app | - | - |
-| TBD | Finance change request | - | - |
+| #11 | Finance change request: required refund reason codes and an audited month-end CSV export for approvers and admins | Nov 1, 2026, 9:51 PM | - |
 
 ## Next steps
 
