@@ -4,22 +4,25 @@ import { claimAction, decideApprovalAction, decideCaseAction } from "@/apps/kyc/
 import { kycPolicy } from "@/apps/kyc/policy";
 import { caseApprovals, caseAudit, getCase } from "@/apps/kyc/service";
 import { AuditTable } from "@/components/AuditTable";
+import { DataTable } from "@/components/fluent/DataTable";
+import { FButton, FTextarea } from "@/components/fluent/fields";
+import { Notice } from "@/components/fluent/Notice";
+import { formatDateTime } from "@/components/labels";
 import { recordAccess } from "@/platform/audit";
 import { getSession } from "@/platform/auth";
 import { can } from "@/platform/rbac";
 import { CaseStatusBadge, RiskBadge } from "../ui";
 
-const inputClass = "w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm";
-const primaryButton = "rounded bg-slate-900 px-3 py-1 text-sm text-white hover:bg-slate-700";
-const dangerButton = "rounded border border-red-300 bg-white px-3 py-1 text-sm text-red-800 hover:bg-red-50";
+const quiet = "font-mono text-xs text-neutral-500";
+const card = "rounded border border-neutral-200 bg-white p-4";
 
 export default async function KycCasePage({ params, searchParams }: PageProps<"/kyc/[id]">) {
   const user = await getSession();
   if (!can(user, kycPolicy.app, "read")) {
     return (
-      <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <Notice intent="error">
         {user ? `${user.name} may not read KYC cases. Requires analyst, approver, or auditor.` : "Sign in to read KYC cases."}
-      </div>
+      </Notice>
     );
   }
 
@@ -39,68 +42,71 @@ export default async function KycCasePage({ params, searchParams }: PageProps<"/
   const canReject = row.status === "in_review" && isAssignee && !pending && can(user, kycPolicy.app, "reject");
   const canDecideApproval = !!pending && pending.requestedBy !== user!.id && user!.roles.includes(kycPolicy.approval!.requiredRole);
 
+  const fields: [string, React.ReactNode][] = [
+    ["Subject", <span key="v" className={quiet}>{row.subjectRef}</span>],
+    ["Full name", row.fullName],
+    ["Document number", <span key="v" className={quiet}>{row.documentNumber}</span>],
+    ["Assignee", <span key="v" className={quiet}>{row.assignee ?? "-"}</span>],
+    ["Decision note", row.decisionNote ?? "-"],
+    ["Updated", formatDateTime(row.updatedAt)],
+  ];
+
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/kyc" className="text-sm text-slate-500 hover:text-slate-900">
+        <Link href="/kyc" className="text-sm text-neutral-500 hover:text-neutral-900">
           &larr; KYC review queue
         </Link>
-        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold">
-          <span className="font-mono">{row.id}</span>
+        <div className="mt-1 flex items-center gap-3">
+          <h1 className="font-mono text-lg text-neutral-600">{row.id}</h1>
           <CaseStatusBadge status={row.status} />
           <RiskBadge tier={row.riskTier} />
-        </h1>
+        </div>
       </div>
 
-      {typeof error === "string" && error && (
-        <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
-      )}
+      {typeof error === "string" && error && <Notice intent="error">{error}</Notice>}
 
-      <dl className="grid gap-x-6 gap-y-2 rounded border border-slate-200 bg-white p-4 text-sm sm:grid-cols-2">
-        <dt className="text-slate-500">Subject</dt>
-        <dd className="font-mono">{row.subjectRef}</dd>
-        <dt className="text-slate-500">Full name</dt>
-        <dd>{row.fullName}</dd>
-        <dt className="text-slate-500">Document number</dt>
-        <dd className="font-mono">{row.documentNumber}</dd>
-        <dt className="text-slate-500">Assignee</dt>
-        <dd className="font-mono">{row.assignee ?? "-"}</dd>
-        <dt className="text-slate-500">Decision note</dt>
-        <dd>{row.decisionNote ?? "-"}</dd>
-        <dt className="text-slate-500">Updated (UTC)</dt>
-        <dd className="font-mono text-xs">{row.updatedAt}</dd>
+      <dl className={`grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 ${card}`}>
+        {fields.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-neutral-500">{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
       </dl>
 
       {canClaim && (
-        <form action={claimAction} className="flex items-center gap-3 rounded border border-slate-200 bg-white p-4">
+        <form action={claimAction} className={`flex items-center gap-3 ${card}`}>
           <input type="hidden" name="id" value={row.id} />
-          <span className="text-sm text-slate-600">This case is unclaimed.</span>
-          <button type="submit" className={primaryButton}>
+          <span className="text-sm text-neutral-600">This case is unclaimed.</span>
+          <FButton type="submit" appearance="primary">
             Claim
-          </button>
+          </FButton>
         </form>
       )}
 
       {(canApprove || canReject) && (
-        <form action={decideCaseAction} className="space-y-3 rounded border border-slate-200 bg-white p-4">
+        <form action={decideCaseAction} className={`space-y-3 ${card}`}>
           <input type="hidden" name="id" value={row.id} />
           <label htmlFor="note" className="block text-sm font-medium">
             Decision note
           </label>
-          <textarea id="note" name="note" required rows={3} className={inputClass} placeholder="Why this case is approved or rejected" />
+          <FTextarea id="note" name="note" required rows={3} className="w-full" placeholder="Why this case is approved or rejected" />
           {row.riskTier === "high" && (
-            <p className="text-xs text-slate-500">High risk: approving opens a request that an approver must decide before the case is approved.</p>
+            <p className="text-xs text-neutral-500">
+              High risk: approving opens a request that an approver must decide before the case is approved.
+            </p>
           )}
           <div className="flex gap-2">
             {canApprove && (
-              <button type="submit" name="decision" value="approved" className={primaryButton}>
+              <FButton type="submit" name="decision" value="approved" appearance="primary">
                 Approve
-              </button>
+              </FButton>
             )}
             {canReject && (
-              <button type="submit" name="decision" value="rejected" className={dangerButton}>
+              <FButton type="submit" name="decision" value="rejected" appearance="outline">
                 Reject
-              </button>
+              </FButton>
             )}
           </div>
         </form>
@@ -109,7 +115,7 @@ export default async function KycCasePage({ params, searchParams }: PageProps<"/
       {pending && (
         <div className="space-y-3 rounded border border-amber-200 bg-amber-50 p-4 text-sm">
           <p>
-            Waiting for approval #{pending.id}: requested by <span className="font-mono">{pending.requestedBy}</span>, requires{" "}
+            Waiting for approval #{pending.id}: requested by <span className={quiet}>{pending.requestedBy}</span>, requires{" "}
             <span className="font-medium">{pending.requiredRole}</span>.
           </p>
           {canDecideApproval ? (
@@ -119,18 +125,18 @@ export default async function KycCasePage({ params, searchParams }: PageProps<"/
               <label htmlFor="approval-note" className="block font-medium">
                 Approver note
               </label>
-              <textarea id="approval-note" name="note" required rows={2} className={inputClass} />
+              <FTextarea id="approval-note" name="note" required rows={2} className="w-full" />
               <div className="flex gap-2">
-                <button type="submit" name="decision" value="approved" className={primaryButton}>
+                <FButton type="submit" name="decision" value="approved" appearance="primary">
                   Approve request
-                </button>
-                <button type="submit" name="decision" value="rejected" className={dangerButton}>
+                </FButton>
+                <FButton type="submit" name="decision" value="rejected" appearance="outline">
                   Reject request
-                </button>
+                </FButton>
               </div>
             </form>
           ) : (
-            <p className="text-slate-600">
+            <p className="text-neutral-600">
               {pending.requestedBy === user!.id ? "You requested this approval and cannot decide it." : "Only an approver can decide this request."}
             </p>
           )}
@@ -140,34 +146,25 @@ export default async function KycCasePage({ params, searchParams }: PageProps<"/
       {approvals.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-lg font-medium">Approvals</h2>
-          <div className="overflow-x-auto rounded border border-slate-200 bg-white">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">#</th>
-                  <th className="px-3 py-2">Requested by</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Decided by</th>
-                  <th className="px-3 py-2">Note</th>
-                  <th className="px-3 py-2">Decided (UTC)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvals.map((a) => (
-                  <tr key={a.id} className="border-t border-slate-100">
-                    <td className="px-3 py-2 font-mono text-xs">{a.id}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{a.requestedBy}</td>
-                    <td className="px-3 py-2">
-                      <CaseStatusBadge status={a.status} />
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">{a.decidedBy ?? "-"}</td>
-                    <td className="px-3 py-2">{a.note ?? "-"}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{a.decidedAt ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={["#", "Requested by", "Status", "Decided by", "Note", "Decided"]}
+            rows={approvals.map((a) => [
+              <span key="i" className={quiet}>
+                {a.id}
+              </span>,
+              <span key="r" className={quiet}>
+                {a.requestedBy}
+              </span>,
+              <CaseStatusBadge key="s" status={a.status} />,
+              <span key="d" className={quiet}>
+                {a.decidedBy ?? "-"}
+              </span>,
+              a.note ?? "-",
+              <span key="t" className="whitespace-nowrap text-neutral-600">
+                {a.decidedAt ? formatDateTime(a.decidedAt) : "-"}
+              </span>,
+            ])}
+          />
         </section>
       )}
 

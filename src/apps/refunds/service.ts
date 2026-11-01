@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { z } from "zod";
 import {
   type Approval,
@@ -90,6 +90,26 @@ export function listRefundAudit(user: SessionUser | null | undefined, id: string
 
 export function pendingApprovalFor(id: string): Approval | undefined {
   return listApprovals({ app: APP, entityId: id, status: "pending" })[0];
+}
+
+export type RefundSummary = {
+  refundsThisMonth: number;
+  pendingApprovals: number;
+  avgApprovalMs: number | null;
+};
+
+/** Summary tiles for the refunds list: created this month (UTC), open approvals, mean request-to-decision time. */
+export function refundSummary(user: SessionUser | null | undefined): RefundSummary {
+  denyUnless(user, "read");
+  const monthStart = new Date().toISOString().slice(0, 7) + "-01T00:00:00.000Z";
+  const refundsThisMonth = db.select().from(refunds).where(gte(refunds.createdAt, monthStart)).all().length;
+  const all = listApprovals({ app: APP });
+  const pendingApprovals = all.filter((a) => a.status === "pending").length;
+  const decided = all.filter((a) => a.decidedAt != null);
+  const avgApprovalMs = decided.length
+    ? decided.reduce((sum, a) => sum + (Date.parse(a.decidedAt!) - Date.parse(a.createdAt)), 0) / decided.length
+    : null;
+  return { refundsThisMonth, pendingApprovals, avgApprovalMs };
 }
 
 /**

@@ -189,3 +189,28 @@ describe("decisions", () => {
     expect(getRefund(user("u_casey"), refund.id)?.processorRef).toBe(paid.processorRef);
   });
 });
+
+describe("refundSummary", () => {
+  it("counts refunds created this month and pending approvals, and averages decision time", async () => {
+    const { refundSummary } = await import("@/apps/refunds/service");
+    const before = refundSummary(user("u_sam"));
+
+    const refund = create(user("u_sam"), 60000);
+    const pending = refundSummary(user("u_sam"));
+    expect(pending.refundsThisMonth).toBe(before.refundsThisMonth + 1);
+    expect(pending.pendingApprovals).toBe(before.pendingApprovals + 1);
+
+    const approval = pendingApprovalFor(refund.id)!;
+    decideRefund(user("u_avery"), approval.id, "approved", "ok");
+    const after = refundSummary(user("u_sam"));
+    expect(after.pendingApprovals).toBe(before.pendingApprovals);
+    expect(after.avgApprovalMs).not.toBeNull();
+    expect(after.avgApprovalMs!).toBeGreaterThanOrEqual(0);
+  });
+
+  it("denies users without refunds read", async () => {
+    const { refundSummary } = await import("@/apps/refunds/service");
+    expect(() => refundSummary(user("u_jordan"))).toThrow(AccessDeniedError);
+    expect(listAuditEvents({ app: "refunds" })[0]).toMatchObject({ actorId: "u_jordan", outcome: "denied" });
+  });
+});
