@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { decideRefundAction, payRefundAction } from "@/apps/refunds/actions";
+import { REFUND_REASON_LABELS } from "@/apps/refunds/schema";
 import { formatCents, getRefund, listRefundApprovals, listRefundAudit } from "@/apps/refunds/service";
 import { AuditTable } from "@/components/AuditTable";
 import { DataTable } from "@/components/fluent/DataTable";
@@ -40,7 +41,8 @@ export default async function RefundPage({ params, searchParams }: PageProps<"/r
         {formatCents(refund.amountCents)} {refund.currency}
       </span>,
     ],
-    ["Reason", refund.reason],
+    ["Reason code", REFUND_REASON_LABELS[refund.reasonCode]],
+    ["Details", refund.reason],
     ["Requested by", <span key="v" className={quiet}>{refund.createdBy}</span>],
     ["Created", formatDateTime(refund.createdAt)],
     ["Updated", formatDateTime(refund.updatedAt)],

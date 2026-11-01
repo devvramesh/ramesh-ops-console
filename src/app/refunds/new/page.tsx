@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createRefundAction } from "@/apps/refunds/actions";
-import { FButton, FInput, FTextarea } from "@/components/fluent/fields";
+import { REFUND_REASON_CODES, REFUND_REASON_LABELS } from "@/apps/refunds/schema";
+import { FButton, FInput, FSelect, FTextarea } from "@/components/fluent/fields";
 import { Notice } from "@/components/fluent/Notice";
 import { getSession } from "@/platform/auth";
 import { can } from "@/platform/rbac";
@@ -55,8 +56,23 @@ export default async function NewRefundPage({ searchParams }: PageProps<"/refund
           </div>
         </div>
         <div>
+          <label htmlFor="reasonCode" className="block text-sm font-medium">
+            Reason code
+          </label>
+          <FSelect id="reasonCode" name="reasonCode" required defaultValue="" className="w-full">
+            <option value="" disabled>
+              Choose a reason
+            </option>
+            {REFUND_REASON_CODES.map((code) => (
+              <option key={code} value={code}>
+                {REFUND_REASON_LABELS[code]}
+              </option>
+            ))}
+          </FSelect>
+        </div>
+        <div>
           <label htmlFor="reason" className="block text-sm font-medium">
-            Reason
+            Details
           </label>
           <FTextarea id="reason" name="reason" required maxLength={500} rows={3} className="w-full" />
         </div>

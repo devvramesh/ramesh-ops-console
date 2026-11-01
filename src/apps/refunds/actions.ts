@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getSession } from "@/platform/auth";
-import { createRefund, decideRefund, dollarsToCents, payRefund } from "./service";
+import { type CreateRefundInput, createRefund, decideRefund, dollarsToCents, payRefund } from "./service";
 
 function text(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -10,7 +10,7 @@ function text(formData: FormData, key: string) {
 }
 
 function errorMessage(err: unknown) {
-  if (err instanceof Error && err.name === "ZodError") return "Check the form: every field is required and the amount must be between $0.01 and $100,000.00.";
+  if (err instanceof Error && err.name === "ZodError") return "Check the form: pick a reason code, every field is required, and the amount must be between $0.01 and $100,000.00.";
   return err instanceof Error ? err.message : "Something went wrong.";
 }
 
@@ -29,6 +29,7 @@ export async function createRefundAction(formData: FormData) {
       customerEmail: text(formData, "customerEmail"),
       amountCents,
       currency: "USD",
+      reasonCode: text(formData, "reasonCode") as CreateRefundInput["reasonCode"],
       reason: text(formData, "reason"),
     });
     target = `/refunds/${refund.id}`;

@@ -24,9 +24,11 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 
 `src/apps/refunds/` with pages under `src/app/refunds/`. Customer refunds.
 
-- Who can do what (`src/apps/refunds/policy.ts`): support, approver, auditor, and admin can read; support creates; approver approves and rejects; admin marks approved refunds paid.
+- Who can do what (`src/apps/refunds/policy.ts`): support, approver, auditor, and admin can read; support creates; approver approves and rejects; admin marks approved refunds paid; approver and admin export.
+- Reason codes: every refund has a `reason_code` from a fixed list in `src/apps/refunds/schema.ts` (`duplicate_charge`, `fraud`, `service_issue`, `goodwill`), required by `createRefundSchema`. The free-text reason is kept as "Details".
+- Export: `GET /refunds/export?month=YYYY-MM` (`src/app/refunds/export/route.ts`, "Export CSV" on `/refunds`) returns refunds created in that UTC month for month-end reconciliation. `exportRefundsCsv()` selects only `EXPORT_COLUMNS`: `refund_id`, `created_at`, `updated_at`, `status`, `reason_code`, `amount_cents`, `currency`, `processor_ref`. No customer email, customer ref, free-text details, or requester id.
 - Approval rule: a refund over $500.00 is created `pending_approval` and needs an approver who is not the requester; at or under $500.00 it is approved automatically on creation.
-- Audited: create, auto-approval, each approval decision, marking paid, and every denied service call. The list masks customer emails; the audit trail is on each refund's page.
+- Audited: create, auto-approval, each approval decision, marking paid, every export (one `export` row through `recordAccess()` with the month, row count, and column list), and every denied service call, including denied exports. The list masks customer emails; the audit trail is on each refund's page.
 
 ### KYC review
 
@@ -35,6 +37,15 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 - Who can do what (`src/apps/kyc/policy.ts`): analyst, approver, and auditor can read; analysts claim new cases and decide cases assigned to them.
 - Approval rule: approving a high-risk case opens an approval that an approver other than the analyst must decide; low and medium risk cases are decided directly.
 - Audited: claim, each decision, each approval decision, every denied service call, and every `read_pii` page load. The queue masks names and document numbers; a case page shows them and writes the read audit row.
+
+### Feature flags
+
+`src/apps/flags/` with pages under `src/app/flags/`. Feature flags with a key, description, on/off state, risk (low or high), and owner note.
+
+- Who can do what (`src/apps/flags/policy.ts`): admin, approver, and auditor can read; admin creates flags and turns them on and off. support and analyst have no access.
+- Kill switch: admin turns any flag off immediately, with no approval.
+- Approval rule: turning a low-risk flag on is immediate; turning a high-risk flag on opens an approval that an approver other than the requester must decide through `decide()`. New flags start off.
+- Audited: create, each on and off, each approval decision, and every denied service call. `owner_note` is PII: redacted in audit JSON and left off the list.
 
 ## Layout
 
@@ -48,11 +59,11 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 - `src/platform/stats.ts`: `countRows()` for home-page tile counts.
 - `src/platform/integrations/payments.ts`: fake payment processor that takes an idempotency key.
 - `src/apps/registry.ts`: one entry per app. The only file apps share.
-- `src/apps/refunds/`, `src/apps/kyc/`: `schema.ts`, `policy.ts`, `service.ts`, `actions.ts`, `seed.ts`.
-- `src/app/refunds/`, `src/app/kyc/`, `src/app/audit/`: server-component pages that check `can()` and load data on the server.
+- `src/apps/refunds/`, `src/apps/kyc/`, `src/apps/flags/`: `schema.ts`, `policy.ts`, `service.ts`, `actions.ts`, `seed.ts`.
+- `src/app/refunds/`, `src/app/kyc/`, `src/app/flags/`, `src/app/audit/`: server-component pages that check `can()` and load data on the server.
 - `src/components/fluent/`: Fluent UI React v9 presentational components (`NavRail`, `DataTable`, `CommandBar`, `StatusPill`, `SummaryTile`, `HomeTile`, `Notice`, `fields.tsx`, `Provider`).
 - `src/components/`: `AuditTable.tsx`, `labels.ts` (`statusLabel`, `formatDateTime`).
-- `tests/`: `platform.test.ts`, `contract.test.ts`, `approval-triggers.test.ts`, `refunds.test.ts`, `kyc.test.ts`, `ui-format.test.ts`, `setup.ts`.
+- `tests/`: `platform.test.ts`, `contract.test.ts`, `approval-triggers.test.ts`, `refunds.test.ts`, `refunds-export-route.test.ts`, `kyc.test.ts`, `flags.test.ts`, `ui-format.test.ts`, `setup.ts`.
 - `.github/CODEOWNERS`: `src/platform/`, `tests/contract.test.ts`, and `AGENTS.md` require `@devvramesh` review.
 - `.github/workflows/ci.yml`: `npm run db:reset`, `npm run typecheck`, `npm run lint`, and `npm test` on every pull request.
 
@@ -111,7 +122,8 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
   - no `db.insert(`, `db.update(`, `db.delete(`, `db.run(`, `db.transaction(`, `sqlite.exec(`, `sqlite.prepare(`, `$client.`, or imports of `better-sqlite3` under `src/apps` or `src/app`
   - every app directory under `src/apps` is registered
   - the fixture app under `tests/fixtures` stays caught by these checks
-- `tests/refunds.test.ts`, `tests/kyc.test.ts`: service-level cases for each app.
+- `tests/refunds.test.ts`, `tests/kyc.test.ts`, `tests/flags.test.ts`: service-level cases for each app, including refund reason-code validation and `exportRefundsCsv` columns, month filter, audit rows, and denials.
+- `tests/refunds-export-route.test.ts`: CSV headers, 403 for support, and 400 for a malformed month on `/refunds/export`.
 - `tests/actions.test.ts`, `tests/auth-actions.test.ts`: decision input validation and same-origin return paths.
 - `tests/kyc-page.test.ts`: one PII-free `read_pii` audit row per KYC detail load.
 
@@ -145,8 +157,10 @@ After the two-hour build I added these to prepare the client demo, outside the t
 | PR | What it did | Opened (UTC) | Merged (UTC) |
 | --- | --- | --- | --- |
 | #7 | Database safeguards on approvals, CODEOWNERS, CI, and the Fluent UI restyle | Nov 1, 2026, 9:07 PM | Nov 1, 2026, 9:13 PM |
-| TBD | Feature-flags app | - | - |
-| TBD | Finance change request | - | - |
+| #8 | Demo user switching ignores invalid user IDs, refunds seeded relative to today, wrapped table text, sidebar alignment with current-section highlight, Next dev indicator disabled | Nov 1, 2026, 9:35 PM | Nov 1, 2026, 9:36 PM |
+| #9 | Feature flags app: admin kill switch, high-risk enables approved by an approver through `decide()`, 8 seeded flags | Nov 1, 2026, 9:50 PM | - |
+| #10 | Sidebar user summary: name above title-cased roles, fixed-size Demo control, top border separating it from navigation | Nov 1, 2026, 9:51 PM | Nov 1, 2026, 9:52 PM |
+| #11 | Finance change request: required refund reason codes and an audited month-end CSV export for approvers and admins | Nov 1, 2026, 9:51 PM | - |
 
 ## Next steps
 

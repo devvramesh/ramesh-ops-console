@@ -7,13 +7,14 @@ export const MAX_AMOUNT_CENTS = 10_000_000;
 export const refundsPolicy: AppPolicy = {
   app: "refunds",
   title: "Refunds",
-  description: "Customer refunds. Support requests, an approver decides anything over $500, admin pays.",
+  description: "Customer refunds. Support requests, an approver decides anything over $500, admin pays. Approvers and admins export a monthly CSV.",
   permissions: {
     read: ["support", "approver", "auditor", "admin"],
     create: ["support"],
     approve: ["approver"],
     reject: ["approver"],
     pay: ["admin"],
+    export: ["approver", "admin"],
   },
   pii: ["customer_email"],
   approval: {

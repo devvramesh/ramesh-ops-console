@@ -18,6 +18,7 @@ const TONES: Record<string, Tone> = {
   low: "success",
   medium: "warning",
   high: "severe",
+  on: "success",
 };
 
 export function StatusPill({ status }: { status: string }) {

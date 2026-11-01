@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { formatCents, listRefunds, maskEmail, refundSummary } from "@/apps/refunds/service";
+import { REFUND_REASON_LABELS } from "@/apps/refunds/schema";
+import { currentMonth, formatCents, listRefunds, maskEmail, refundSummary } from "@/apps/refunds/service";
 import { CommandBar } from "@/components/fluent/CommandBar";
 import { DataTable } from "@/components/fluent/DataTable";
-import { FButton } from "@/components/fluent/fields";
+import { FButton, FInput } from "@/components/fluent/fields";
 import { Notice } from "@/components/fluent/Notice";
 import { StatusPill } from "@/components/fluent/StatusPill";
 import { SummaryTile } from "@/components/fluent/SummaryTile";
@@ -35,7 +36,7 @@ export default async function RefundsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold">Refunds</h1>
-        <p className="mt-1 text-sm text-neutral-600">Refunds over $500.00 wait for an approver. Customer emails are masked here.</p>
+        <p className="mt-1 text-sm text-neutral-600">Refunds over $500.00 wait for an approver. Customer emails are masked here. Approvers and admins can export a month as CSV without customer data; each export is audited.</p>
       </div>
       <div className="flex flex-wrap gap-3">
         <SummaryTile label="Refunds this month" value={String(summary.refundsThisMonth)} />
@@ -51,12 +52,23 @@ export default async function RefundsPage() {
             New refund
           </FButton>
         )}
+        {can(user, "refunds", "export") && (
+          <form method="get" action="/refunds/export" className="ml-auto flex items-center gap-2">
+            <label htmlFor="month" className="text-sm text-neutral-600">
+              Created in (UTC)
+            </label>
+            <FInput id="month" name="month" type="month" defaultValue={currentMonth()} required size="small" />
+            <FButton type="submit" appearance="outline" size="small">
+              Export CSV
+            </FButton>
+          </form>
+        )}
       </CommandBar>
       {rows.length === 0 ? (
         <p className="text-sm text-neutral-500">No refunds.</p>
       ) : (
         <DataTable
-          columns={["Refund", "Customer", "Email", "Amount", "Status", "Reason", "Created"]}
+          columns={["Refund", "Customer", "Email", "Amount", "Status", "Reason code", "Created"]}
           rows={rows.map((r) => [
             <Link key="id" href={`/refunds/${r.id}`} className={quietId}>
               {r.id}
@@ -70,7 +82,7 @@ export default async function RefundsPage() {
             </span>,
             <StatusPill key="s" status={r.status} />,
             <span key="r" className="text-neutral-600">
-              {r.reason}
+              {REFUND_REASON_LABELS[r.reasonCode]}
             </span>,
             <span key="t" className="text-neutral-600">
               {formatDateTime(r.createdAt)}

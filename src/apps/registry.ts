@@ -2,6 +2,10 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { Approval, Decision } from "@/platform/approvals";
 import type { Tx } from "@/platform/db/client";
 import type { AppPolicy, SessionUser } from "@/platform/rbac";
+import { flagsPolicy } from "./flags/policy";
+import { featureFlags } from "./flags/schema";
+import { seedFlags } from "./flags/seed";
+import { createFlag, onFlagDecision } from "./flags/service";
 import { kycPolicy } from "./kyc/policy";
 import { kycCases } from "./kyc/schema";
 import { seedKyc } from "./kyc/seed";
@@ -38,6 +42,7 @@ export const apps: AppEntry[] = [
           customerEmail: "contract.check@example.com",
           amountCents: 75000,
           currency: "USD",
+          reasonCode: "goodwill",
           reason: "contract test",
         }),
     },
@@ -48,5 +53,21 @@ export const apps: AppEntry[] = [
     seed: seedKyc,
     onDecision: onKycDecision,
     contractWrite: { action: "claim", run: contractClaim },
+  },
+  {
+    policy: flagsPolicy,
+    table: featureFlags,
+    seed: seedFlags,
+    onDecision: onFlagDecision,
+    contractWrite: {
+      action: "create",
+      run: (user) =>
+        createFlag(user, {
+          key: "contract_check",
+          description: "contract test",
+          risk: "low",
+          ownerNote: "Owned by the contract test",
+        }),
+    },
   },
 ];

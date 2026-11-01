@@ -210,7 +210,7 @@ describe("high-risk approval", () => {
 
   it("audits a decision attempt on a refunds approval", () => {
     // A refunds approval probed through the KYC path is denied and audited under refunds.
-    const refund = createRefund(sam(), { customerRef: "cus_probe", customerEmail: "probe@example.com", amountCents: 60000, currency: "USD", reason: "probe" });
+    const refund = createRefund(sam(), { customerRef: "cus_probe", customerEmail: "probe@example.com", amountCents: 60000, currency: "USD", reasonCode: "fraud", reason: "probe" });
     const approval = pendingApprovalFor(refund.id)!;
     const deniedBefore = listAuditEvents({ app: "refunds" }).filter((r) => r.outcome === "denied").length;
     expect(() => decideApproval(avery(), approval.id, "approved", "wrong app")).toThrow(KycError);
