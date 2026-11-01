@@ -36,6 +36,15 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 - Approval rule: approving a high-risk case opens an approval that an approver other than the analyst must decide; low and medium risk cases are decided directly.
 - Audited: claim, each decision, each approval decision, every denied service call, and every `read_pii` page load. The queue masks names and document numbers; a case page shows them and writes the read audit row.
 
+### Feature flags
+
+`src/apps/flags/` with pages under `src/app/flags/`. Feature flags with a key, description, on/off state, risk (low or high), and owner note.
+
+- Who can do what (`src/apps/flags/policy.ts`): admin, approver, and auditor can read; admin creates flags and turns them on and off. support and analyst have no access.
+- Kill switch: admin turns any flag off immediately, with no approval.
+- Approval rule: turning a low-risk flag on is immediate; turning a high-risk flag on opens an approval that an approver other than the requester must decide through `decide()`. New flags start off.
+- Audited: create, each on and off, each approval decision, and every denied service call. `owner_note` is PII: redacted in audit JSON and left off the list.
+
 ## Layout
 
 - `src/platform/auth.ts`: signed `ops_session` cookie, `getSession()`, roles loaded on every request.
@@ -48,11 +57,11 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 - `src/platform/stats.ts`: `countRows()` for home-page tile counts.
 - `src/platform/integrations/payments.ts`: fake payment processor that takes an idempotency key.
 - `src/apps/registry.ts`: one entry per app. The only file apps share.
-- `src/apps/refunds/`, `src/apps/kyc/`: `schema.ts`, `policy.ts`, `service.ts`, `actions.ts`, `seed.ts`.
-- `src/app/refunds/`, `src/app/kyc/`, `src/app/audit/`: server-component pages that check `can()` and load data on the server.
+- `src/apps/refunds/`, `src/apps/kyc/`, `src/apps/flags/`: `schema.ts`, `policy.ts`, `service.ts`, `actions.ts`, `seed.ts`.
+- `src/app/refunds/`, `src/app/kyc/`, `src/app/flags/`, `src/app/audit/`: server-component pages that check `can()` and load data on the server.
 - `src/components/fluent/`: Fluent UI React v9 presentational components (`NavRail`, `DataTable`, `CommandBar`, `StatusPill`, `SummaryTile`, `HomeTile`, `Notice`, `fields.tsx`, `Provider`).
 - `src/components/`: `AuditTable.tsx`, `labels.ts` (`statusLabel`, `formatDateTime`).
-- `tests/`: `platform.test.ts`, `contract.test.ts`, `approval-triggers.test.ts`, `refunds.test.ts`, `kyc.test.ts`, `ui-format.test.ts`, `setup.ts`.
+- `tests/`: `platform.test.ts`, `contract.test.ts`, `approval-triggers.test.ts`, `refunds.test.ts`, `kyc.test.ts`, `flags.test.ts`, `ui-format.test.ts`, `setup.ts`.
 - `.github/CODEOWNERS`: `src/platform/`, `tests/contract.test.ts`, and `AGENTS.md` require `@devvramesh` review.
 - `.github/workflows/ci.yml`: `npm run db:reset`, `npm run typecheck`, `npm run lint`, and `npm test` on every pull request.
 
@@ -111,7 +120,7 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
   - no `db.insert(`, `db.update(`, `db.delete(`, `db.run(`, `db.transaction(`, `sqlite.exec(`, `sqlite.prepare(`, `$client.`, or imports of `better-sqlite3` under `src/apps` or `src/app`
   - every app directory under `src/apps` is registered
   - the fixture app under `tests/fixtures` stays caught by these checks
-- `tests/refunds.test.ts`, `tests/kyc.test.ts`: service-level cases for each app.
+- `tests/refunds.test.ts`, `tests/kyc.test.ts`, `tests/flags.test.ts`: service-level cases for each app.
 - `tests/actions.test.ts`, `tests/auth-actions.test.ts`: decision input validation and same-origin return paths.
 - `tests/kyc-page.test.ts`: one PII-free `read_pii` audit row per KYC detail load.
 
