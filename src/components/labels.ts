@@ -25,7 +25,7 @@ const DATE_TIME = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-/** ISO 8601 (UTC) -> "Oct 18, 2026, 6:25 PM". */
+/** ISO 8601 -> "Oct 18, 2026, 6:25 PM UTC". The zone is shown so it can't read as local time. */
 export function formatDateTime(iso: string): string {
-  return DATE_TIME.format(new Date(iso));
+  return `${DATE_TIME.format(new Date(iso))} UTC`;
 }

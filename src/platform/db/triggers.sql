@@ -26,3 +26,12 @@ WHEN OLD.status != 'pending'
 BEGIN
   SELECT RAISE(ABORT, 'approval is no longer pending');
 END;
+
+-- Leaving pending means a decision, and a decision needs a decider. Blocks a
+-- direct status flip that skips decide() and its audit and state updates.
+CREATE TRIGGER IF NOT EXISTS approvals_decision_needs_decider
+BEFORE UPDATE ON approvals
+WHEN NEW.status != 'pending' AND NEW.decided_by IS NULL
+BEGIN
+  SELECT RAISE(ABORT, 'a decided approval requires decided_by');
+END;

@@ -75,6 +75,15 @@ describe("approval triggers", () => {
     expect(getApproval(id)).toMatchObject({ status: "rejected", decidedBy: "u_avery" });
   });
 
+  it("rejects a status flip to decided with no decided_by, even inside a raw transaction", () => {
+    const id = pendingApproval("u_sam");
+    const write = sqlite.transaction(() => {
+      sqlite.prepare("UPDATE approvals SET status = 'approved' WHERE id = ?").run(id);
+    });
+    expect(() => write()).toThrow(/requires decided_by/);
+    expect(getApproval(id)).toMatchObject({ status: "pending", decidedBy: null });
+  });
+
   it("still allows ordinary writes to pending approvals", () => {
     const id = pendingApproval("u_sam");
     db.update(approvals).set({ note: "still pending" }).where(eq(approvals.id, id)).run();

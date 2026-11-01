@@ -44,7 +44,7 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 - `src/platform/audit.ts`: `writeAudit()`, `auditDenied()`, `recordAccess()`, `listAuditEvents()`.
 - `src/platform/approvals.ts`: `requestApproval()`, `decide()`; table in `src/platform/approvals/schema.ts`.
 - `src/platform/redact.ts`: replaces each `policy.pii` field with `[redacted]`.
-- `src/platform/db/`: `schema.ts`, `client.ts`, `triggers.sql`, `reset.ts`, `seed.ts`. Triggers make `audit_events` append-only and reject self-decided approvals and any update to a non-pending approval.
+- `src/platform/db/`: `schema.ts`, `client.ts`, `triggers.sql`, `reset.ts`, `seed.ts`. Triggers make `audit_events` append-only and reject self-decided approvals, any update to a non-pending approval, and any decision written without a `decided_by`.
 - `src/platform/stats.ts`: `countRows()` for home-page tile counts.
 - `src/platform/integrations/payments.ts`: fake payment processor that takes an idempotency key.
 - `src/apps/registry.ts`: one entry per app. The only file apps share.
@@ -97,9 +97,10 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 - `tests/approval-triggers.test.ts`
   - an UPDATE that sets `decided_by` to the requester fails, even inside a raw transaction
   - any UPDATE to a non-pending approval fails, even inside a raw transaction
+  - an UPDATE that sets a decided status with no `decided_by` fails, even inside a raw transaction
 - `tests/ui-format.test.ts`
   - `statusLabel` renders readable labels such as "Pending approval"
-  - `formatDateTime` renders "Oct 18, 2026, 6:25 PM"
+  - `formatDateTime` renders "Oct 18, 2026, 6:25 PM UTC"
   - `countRows` returns seeded counts for every registered app
 - `tests/contract.test.ts`, for every entry in `src/apps/registry.ts`
   - the policy declares permissions
@@ -116,7 +117,7 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 
 ## Security notes
 
-- `src/platform/db/triggers.sql` makes `audit_events` append-only and rejects, at the database layer, any approval decided by its requester and any update to a non-pending approval.
+- `src/platform/db/triggers.sql` makes `audit_events` append-only and rejects, at the database layer, any approval decided by its requester, any update to a non-pending approval, and any decision written without a `decided_by`.
 - `.github/CODEOWNERS` assigns `src/platform/`, `tests/contract.test.ts`, and `AGENTS.md` to `@devvramesh`.
 - `.github/workflows/ci.yml` runs `npm run db:reset`, `npm run typecheck`, `npm run lint`, and `npm test` on every pull request.
 

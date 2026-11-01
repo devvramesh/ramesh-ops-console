@@ -11,8 +11,8 @@ describe("labels", () => {
     expect(statusLabel("something_new")).toBe("Something new");
   });
 
-  it("formats UTC timestamps like 'Oct 18, 2026, 6:25 PM'", () => {
-    expect(formatDateTime("2026-10-18T18:25:00.000Z")).toBe("Oct 18, 2026, 6:25 PM");
+  it("formats UTC timestamps like 'Oct 18, 2026, 6:25 PM UTC'", () => {
+    expect(formatDateTime("2026-10-18T18:25:00.000Z")).toBe("Oct 18, 2026, 6:25 PM UTC");
   });
 });
 
