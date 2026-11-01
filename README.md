@@ -24,9 +24,11 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 
 `src/apps/refunds/` with pages under `src/app/refunds/`. Customer refunds.
 
-- Who can do what (`src/apps/refunds/policy.ts`): support, approver, auditor, and admin can read; support creates; approver approves and rejects; admin marks approved refunds paid.
+- Who can do what (`src/apps/refunds/policy.ts`): support, approver, auditor, and admin can read; support creates; approver approves and rejects; admin marks approved refunds paid; approver and admin export.
+- Reason codes: every refund has a `reason_code` from a fixed list in `src/apps/refunds/schema.ts` (`duplicate_charge`, `fraud`, `service_issue`, `goodwill`), required by `createRefundSchema`. The free-text reason is kept as "Details".
+- Export: `GET /refunds/export?month=YYYY-MM` (`src/app/refunds/export/route.ts`, "Export CSV" on `/refunds`) returns refunds created in that UTC month for month-end reconciliation. `exportRefundsCsv()` selects only `EXPORT_COLUMNS`: `refund_id`, `created_at`, `updated_at`, `status`, `reason_code`, `amount_cents`, `currency`, `processor_ref`. No customer email, customer ref, free-text details, or requester id.
 - Approval rule: a refund over $500.00 is created `pending_approval` and needs an approver who is not the requester; at or under $500.00 it is approved automatically on creation.
-- Audited: create, auto-approval, each approval decision, marking paid, and every denied service call. The list masks customer emails; the audit trail is on each refund's page.
+- Audited: create, auto-approval, each approval decision, marking paid, every export (one `export` row through `recordAccess()` with the month, row count, and column list), and every denied service call, including denied exports. The list masks customer emails; the audit trail is on each refund's page.
 
 ### KYC review
 
@@ -61,7 +63,7 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
 - `src/app/refunds/`, `src/app/kyc/`, `src/app/flags/`, `src/app/audit/`: server-component pages that check `can()` and load data on the server.
 - `src/components/fluent/`: Fluent UI React v9 presentational components (`NavRail`, `DataTable`, `CommandBar`, `StatusPill`, `SummaryTile`, `HomeTile`, `Notice`, `fields.tsx`, `Provider`).
 - `src/components/`: `AuditTable.tsx`, `labels.ts` (`statusLabel`, `formatDateTime`).
-- `tests/`: `platform.test.ts`, `contract.test.ts`, `approval-triggers.test.ts`, `refunds.test.ts`, `kyc.test.ts`, `flags.test.ts`, `ui-format.test.ts`, `setup.ts`.
+- `tests/`: `platform.test.ts`, `contract.test.ts`, `approval-triggers.test.ts`, `refunds.test.ts`, `refunds-export-route.test.ts`, `kyc.test.ts`, `flags.test.ts`, `ui-format.test.ts`, `setup.ts`.
 - `.github/CODEOWNERS`: `src/platform/`, `tests/contract.test.ts`, and `AGENTS.md` require `@devvramesh` review.
 - `.github/workflows/ci.yml`: `npm run db:reset`, `npm run typecheck`, `npm run lint`, and `npm test` on every pull request.
 
@@ -120,7 +122,8 @@ Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation
   - no `db.insert(`, `db.update(`, `db.delete(`, `db.run(`, `db.transaction(`, `sqlite.exec(`, `sqlite.prepare(`, `$client.`, or imports of `better-sqlite3` under `src/apps` or `src/app`
   - every app directory under `src/apps` is registered
   - the fixture app under `tests/fixtures` stays caught by these checks
-- `tests/refunds.test.ts`, `tests/kyc.test.ts`, `tests/flags.test.ts`: service-level cases for each app.
+- `tests/refunds.test.ts`, `tests/kyc.test.ts`, `tests/flags.test.ts`: service-level cases for each app, including refund reason-code validation and `exportRefundsCsv` columns, month filter, audit rows, and denials.
+- `tests/refunds-export-route.test.ts`: CSV headers, 403 for support, and 400 for a malformed month on `/refunds/export`.
 - `tests/actions.test.ts`, `tests/auth-actions.test.ts`: decision input validation and same-origin return paths.
 - `tests/kyc-page.test.ts`: one PII-free `read_pii` audit row per KYC detail load.
 

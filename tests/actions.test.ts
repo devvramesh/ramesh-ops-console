@@ -50,7 +50,7 @@ afterAll(() => {
 describe("decision actions fail closed", () => {
   it("rejects an unknown refund decision without changing anything", async () => {
     const refund = createRefund(loadUser("u_sam")!, {
-      customerRef: "cus_action", customerEmail: "action@example.com", amountCents: 75000, currency: "USD", reason: "action test",
+      customerRef: "cus_action", customerEmail: "action@example.com", amountCents: 75000, currency: "USD", reasonCode: "goodwill", reason: "action test",
     });
     vi.mocked(getSession).mockResolvedValue(loadUser("u_avery"));
     const form = new FormData();

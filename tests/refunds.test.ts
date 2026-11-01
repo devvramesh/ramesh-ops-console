@@ -1,7 +1,18 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { claimCase, decideCase } from "@/apps/kyc/service";
-import { createRefund, decideRefund, dollarsToCents, getRefund, listRefunds, payRefund, pendingApprovalFor } from "@/apps/refunds/service";
+import {
+  createRefund,
+  currentMonth,
+  decideRefund,
+  dollarsToCents,
+  EXPORT_COLUMNS,
+  exportRefundsCsv,
+  getRefund,
+  listRefunds,
+  payRefund,
+  pendingApprovalFor,
+} from "@/apps/refunds/service";
 import { ApprovalError, getApproval, listApprovals } from "@/platform/approvals";
 import { AccessDeniedError, listAuditEvents } from "@/platform/audit";
 import { loadUser } from "@/platform/auth";
@@ -23,7 +34,7 @@ function auditCount() {
 }
 
 function create(actor: SessionUser, amountCents: number) {
-  return createRefund(actor, { customerRef: "cus_test", customerEmail: EMAIL, amountCents, currency: "USD", reason: "test" });
+  return createRefund(actor, { customerRef: "cus_test", customerEmail: EMAIL, amountCents, currency: "USD", reasonCode: "service_issue", reason: "test" });
 }
 
 function expectRedacted(rows: ReturnType<typeof listAuditEvents>) {
@@ -70,7 +81,7 @@ describe("threshold", () => {
     expect(() => create(user("u_sam"), 12.5)).toThrow();
     expect(() => create(user("u_sam"), 10000001)).toThrow();
     expect(() =>
-      createRefund(user("u_sam"), { customerRef: "cus_x", customerEmail: EMAIL, amountCents: 100, currency: "EUR" as "USD", reason: "x" }),
+      createRefund(user("u_sam"), { customerRef: "cus_x", customerEmail: EMAIL, amountCents: 100, currency: "EUR" as "USD", reasonCode: "goodwill", reason: "x" }),
     ).toThrow();
     expect(auditCount()).toBe(before);
   });
@@ -212,5 +223,72 @@ describe("refundSummary", () => {
     const { refundSummary } = await import("@/apps/refunds/service");
     expect(() => refundSummary(user("u_jordan"))).toThrow(AccessDeniedError);
     expect(listAuditEvents({ app: "refunds" })[0]).toMatchObject({ actorId: "u_jordan", outcome: "denied" });
+  });
+});
+
+describe("reason code", () => {
+  it("is stored on create and rejects a missing or unknown code without writing", () => {
+    const refund = create(user("u_sam"), 1200);
+    expect(refund.reasonCode).toBe("service_issue");
+    const before = auditCount();
+    const base = { customerRef: "cus_rc", customerEmail: EMAIL, amountCents: 1200, currency: "USD" as const, reason: "x" };
+    expect(() => createRefund(user("u_sam"), { ...base, reasonCode: "other" as "fraud" })).toThrow();
+    expect(() => createRefund(user("u_sam"), { ...base } as Parameters<typeof createRefund>[1])).toThrow();
+    expect(auditCount()).toBe(before);
+  });
+});
+
+describe("exportRefundsCsv", () => {
+  const exportRows = () => listAuditEvents({ app: "refunds" }).filter((r) => r.action === "export");
+
+  it.each([
+    ["u_avery", "approver"],
+    ["u_casey", "admin"],
+  ])("lets %s export and writes one PII-free audit row", (userId, role) => {
+    create(user("u_sam"), 2500);
+    const before = exportRows().length;
+    const month = currentMonth();
+    const { csv, filename, rowCount } = exportRefundsCsv(user(userId), month);
+
+    expect(filename).toBe(`refunds-${month}.csv`);
+    const lines = csv.trimEnd().split("\r\n");
+    expect(lines[0]).toBe(EXPORT_COLUMNS.join(","));
+    expect(lines).toHaveLength(rowCount + 1);
+    expect(rowCount).toBeGreaterThan(0);
+    for (const line of lines.slice(1)) expect(line).toMatch(/,(duplicate_charge|fraud|service_issue|goodwill),\d+,USD,/);
+    expect(csv).not.toContain("@");
+    expect(csv).not.toContain("cus_");
+    expect(csv).not.toContain(EMAIL);
+
+    const rows = exportRows();
+    expect(rows).toHaveLength(before + 1);
+    expect(rows[0]).toMatchObject({ actorId: userId, actorRole: role, outcome: "ok", entityId: null, beforeJson: null });
+    expect(JSON.parse(rows[0].afterJson!)).toEqual({ month, rowCount, columns: [...EXPORT_COLUMNS] });
+  });
+
+  it("returns only refunds created in the requested UTC month", () => {
+    const { csv, rowCount } = exportRefundsCsv(user("u_avery"), "2000-01");
+    expect(rowCount).toBe(0);
+    expect(csv).toBe(EXPORT_COLUMNS.join(",") + "\r\n");
+  });
+
+  it.each([["u_sam"], ["u_quinn"], ["u_jordan"]])("denies %s and audits the denial", (userId) => {
+    const before = exportRows();
+    expect(() => exportRefundsCsv(user(userId), currentMonth())).toThrow(AccessDeniedError);
+    const after = exportRows();
+    expect(after).toHaveLength(before.length + 1);
+    expect(after[0]).toMatchObject({ actorId: userId, outcome: "denied", afterJson: null });
+  });
+
+  it("denies an anonymous export and audits it", () => {
+    expect(() => exportRefundsCsv(null, currentMonth())).toThrow(AccessDeniedError);
+    expect(exportRows()[0]).toMatchObject({ actorId: "anonymous", outcome: "denied" });
+  });
+
+  it("rejects a malformed month without writing an ok row", () => {
+    const before = exportRows().length;
+    expect(() => exportRefundsCsv(user("u_avery"), "2026-13")).toThrow();
+    expect(() => exportRefundsCsv(user("u_avery"), "2026-1")).toThrow();
+    expect(exportRows()).toHaveLength(before);
   });
 });

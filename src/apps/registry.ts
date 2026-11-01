@@ -42,6 +42,7 @@ export const apps: AppEntry[] = [
           customerEmail: "contract.check@example.com",
           amountCents: 75000,
           currency: "USD",
+          reasonCode: "goodwill",
           reason: "contract test",
         }),
     },

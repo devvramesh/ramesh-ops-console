@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt } from "drizzle-orm";
 import { z } from "zod";
 import {
   type Approval,
@@ -10,14 +10,14 @@ import {
   listApprovals,
   requestApproval,
 } from "@/platform/approvals";
-import { AccessDeniedError, auditDenied, listAuditEvents, newRequestId, writeAudit } from "@/platform/audit";
+import { AccessDeniedError, auditDenied, listAuditEvents, newRequestId, recordAccess, writeAudit } from "@/platform/audit";
 import type { Tx } from "@/platform/db/client";
 import { db } from "@/platform/db/client";
 import { payments } from "@/platform/integrations/payments";
 import { mutate } from "@/platform/mutate";
 import { authorizingRole, can, type SessionUser } from "@/platform/rbac";
 import { APPROVAL_THRESHOLD_CENTS, MAX_AMOUNT_CENTS, refundsPolicy } from "./policy";
-import { type Refund, refunds } from "./schema";
+import { REFUND_REASON_CODES, type Refund, refunds } from "./schema";
 
 const APP = refundsPolicy.app;
 
@@ -33,6 +33,7 @@ export const createRefundSchema = z.object({
   customerEmail: z.email().max(254),
   amountCents: z.number().int().positive().max(MAX_AMOUNT_CENTS),
   currency: z.literal("USD"),
+  reasonCode: z.enum(REFUND_REASON_CODES),
   reason: z.string().trim().min(1).max(500),
 });
 export type CreateRefundInput = z.input<typeof createRefundSchema>;
@@ -110,6 +111,62 @@ export function refundSummary(user: SessionUser | null | undefined): RefundSumma
     ? decided.reduce((sum, a) => sum + (Date.parse(a.decidedAt!) - Date.parse(a.createdAt)), 0) / decided.length
     : null;
   return { refundsThisMonth, pendingApprovals, avgApprovalMs };
+}
+
+export const EXPORT_COLUMNS = [
+  "refund_id",
+  "created_at",
+  "updated_at",
+  "status",
+  "reason_code",
+  "amount_cents",
+  "currency",
+  "processor_ref",
+] as const;
+
+const exportMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must be YYYY-MM");
+
+export function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+/** Quotes a CSV cell when needed and neutralises spreadsheet formulas. */
+function csvCell(value: string | number | null): string {
+  if (value === null) return "";
+  let text = String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+/**
+ * Refunds created in one UTC month as CSV, for month-end reconciliation.
+ * Selects only EXPORT_COLUMNS, so customer email, customer ref, free-text reason, and requester never load.
+ * Each successful export writes one audit row through recordAccess(); a denied one writes outcome = 'denied'.
+ */
+export function exportRefundsCsv(user: SessionUser | null | undefined, month: string) {
+  denyUnless(user, "export");
+  const m = exportMonthSchema.parse(month);
+  const [year, mon] = m.split("-").map(Number);
+  const start = new Date(Date.UTC(year, mon - 1, 1)).toISOString();
+  const end = new Date(Date.UTC(year, mon, 1)).toISOString();
+  const rows = db
+    .select({
+      refund_id: refunds.id,
+      created_at: refunds.createdAt,
+      updated_at: refunds.updatedAt,
+      status: refunds.status,
+      reason_code: refunds.reasonCode,
+      amount_cents: refunds.amountCents,
+      currency: refunds.currency,
+      processor_ref: refunds.processorRef,
+    })
+    .from(refunds)
+    .where(and(gte(refunds.createdAt, start), lt(refunds.createdAt, end)))
+    .orderBy(asc(refunds.createdAt), asc(refunds.id))
+    .all();
+  recordAccess(user, { app: APP, action: "export", detail: { month: m, rowCount: rows.length, columns: [...EXPORT_COLUMNS] } });
+  const lines = [EXPORT_COLUMNS.join(","), ...rows.map((r) => EXPORT_COLUMNS.map((c) => csvCell(r[c])).join(","))];
+  return { filename: `refunds-${m}.csv`, csv: lines.join("\r\n") + "\r\n", rowCount: rows.length };
 }
 
 /**
