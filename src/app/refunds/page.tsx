@@ -1,70 +1,82 @@
 import Link from "next/link";
-import { formatCents, listRefunds, maskEmail } from "@/apps/refunds/service";
+import { formatCents, listRefunds, maskEmail, refundSummary } from "@/apps/refunds/service";
+import { CommandBar } from "@/components/fluent/CommandBar";
+import { DataTable } from "@/components/fluent/DataTable";
+import { FButton } from "@/components/fluent/fields";
+import { Notice } from "@/components/fluent/Notice";
+import { StatusPill } from "@/components/fluent/StatusPill";
+import { SummaryTile } from "@/components/fluent/SummaryTile";
+import { formatDateTime } from "@/components/labels";
 import { getSession } from "@/platform/auth";
 import { can } from "@/platform/rbac";
-import { StatusBadge } from "./status";
+
+const quietId = "font-mono text-xs text-neutral-500";
+
+function formatDuration(ms: number) {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = minutes / 60;
+  return hours < 48 ? `${hours.toFixed(1)} hrs` : `${(hours / 24).toFixed(1)} days`;
+}
 
 export default async function RefundsPage() {
   const user = await getSession();
   if (!can(user, "refunds", "read")) {
     return (
-      <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <Notice intent="error">
         {user ? `${user.name} may not read refunds.` : "Sign in to read refunds."}
-      </div>
+      </Notice>
     );
   }
   const rows = listRefunds(user);
+  const summary = refundSummary(user);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Refunds</h1>
-          <p className="mt-1 text-sm text-slate-600">Refunds over $500.00 wait for an approver. Customer emails are masked here.</p>
-        </div>
-        {can(user, "refunds", "create") && (
-          <Link href="/refunds/new" className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">
-            New refund
-          </Link>
-        )}
+      <div>
+        <h1 className="text-2xl font-semibold">Refunds</h1>
+        <p className="mt-1 text-sm text-neutral-600">Refunds over $500.00 wait for an approver. Customer emails are masked here.</p>
       </div>
+      <div className="flex flex-wrap gap-3">
+        <SummaryTile label="Refunds this month" value={String(summary.refundsThisMonth)} />
+        <SummaryTile label="Pending approvals" value={String(summary.pendingApprovals)} />
+        <SummaryTile
+          label="Average time to approve"
+          value={summary.avgApprovalMs == null ? "-" : formatDuration(summary.avgApprovalMs)}
+        />
+      </div>
+      <CommandBar>
+        {can(user, "refunds", "create") && (
+          <FButton as="a" href="/refunds/new" appearance="primary" size="small">
+            New refund
+          </FButton>
+        )}
+      </CommandBar>
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-500">No refunds.</p>
+        <p className="text-sm text-neutral-500">No refunds.</p>
       ) : (
-        <div className="overflow-x-auto rounded border border-slate-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Refund</th>
-                <th className="px-3 py-2">Customer</th>
-                <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2 text-right">Amount</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Reason</th>
-                <th className="px-3 py-2">Created (UTC)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-mono text-xs">
-                    <Link href={`/refunds/${r.id}`} className="text-blue-700 hover:underline">
-                      {r.id}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs">{r.customerRef}</td>
-                  <td className="px-3 py-2">{maskEmail(r.customerEmail)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{formatCents(r.amountCents)}</td>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">{r.reason}</td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{r.createdAt}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={["Refund", "Customer", "Email", "Amount", "Status", "Reason", "Created"]}
+          rows={rows.map((r) => [
+            <Link key="id" href={`/refunds/${r.id}`} className={quietId}>
+              {r.id}
+            </Link>,
+            <span key="c" className={quietId}>
+              {r.customerRef}
+            </span>,
+            maskEmail(r.customerEmail),
+            <span key="a" className="font-mono">
+              {formatCents(r.amountCents)}
+            </span>,
+            <StatusPill key="s" status={r.status} />,
+            <span key="r" className="text-neutral-600">
+              {r.reason}
+            </span>,
+            <span key="t" className="whitespace-nowrap text-neutral-600">
+              {formatDateTime(r.createdAt)}
+            </span>,
+          ])}
+        />
       )}
     </div>
   );
