@@ -9,3 +9,20 @@ BEFORE DELETE ON audit_events
 BEGIN
   SELECT RAISE(ABORT, 'audit_events is append-only');
 END;
+
+-- The requester can't decide their own request, even via a direct write that
+-- bypasses decide().
+CREATE TRIGGER IF NOT EXISTS approvals_no_self_decision
+BEFORE UPDATE ON approvals
+WHEN NEW.decided_by IS NOT NULL AND NEW.decided_by = NEW.requested_by
+BEGIN
+  SELECT RAISE(ABORT, 'requester cannot decide their own approval');
+END;
+
+-- A request is decided once: no writes to a non-pending approval.
+CREATE TRIGGER IF NOT EXISTS approvals_pending_only
+BEFORE UPDATE ON approvals
+WHEN OLD.status != 'pending'
+BEGIN
+  SELECT RAISE(ABORT, 'approval is no longer pending');
+END;
