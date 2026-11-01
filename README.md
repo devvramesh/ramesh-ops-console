@@ -14,7 +14,7 @@ npm run db:reset
 npm run dev
 ```
 
-Open http://localhost:3000. The header switcher signs in as one of seven seeded users from `src/platform/db/seed.ts`. It works only with `AUTH_MODE=dev` and `NODE_ENV` not set to `production`.
+Open http://localhost:3000. The "Demo" menu at the bottom of the left navigation signs in as one of seven seeded users from `src/platform/db/seed.ts`. It works only with `AUTH_MODE=dev` and `NODE_ENV` not set to `production`.
 
 `npm run db:reset` also replaces the placeholder `SESSION_SECRET` from `.env.example` in `.env.local` with a random one; cookies signed with the placeholder would be forgeable by anyone who has this file.
 
@@ -30,9 +30,11 @@ Open http://localhost:3000. The header switcher signs in as one of seven seeded 
 - `src/platform/integrations/payments.ts`: fake payment processor that takes an idempotency key.
 - `src/apps/registry.ts`: one entry per app. The only file apps share.
 - `src/apps/refunds/`, `src/apps/kyc/`: `schema.ts`, `policy.ts`, `service.ts`, `actions.ts`, `seed.ts`.
-- `src/app/refunds/`, `src/app/kyc/`, `src/app/audit/`: pages.
-- `src/components/`: `UserSwitcher.tsx`, `AuditTable.tsx`.
-- `tests/`: `platform.test.ts`, `contract.test.ts`, `refunds.test.ts`, `kyc.test.ts`, `setup.ts`.
+- `src/app/refunds/`, `src/app/kyc/`, `src/app/audit/`: server-component pages that check `can()` and load data on the server.
+- `src/components/fluent/`: Fluent UI React v9 presentational components (`NavRail`, `DataTable`, `CommandBar`, `StatusPill`, `SummaryTile`, `HomeTile`, `Notice`, `fields.tsx`, `Provider`).
+- `src/components/`: `AuditTable.tsx`, `labels.ts` (`statusLabel`, `formatDateTime`).
+- `src/platform/stats.ts`: `countRows()` for home-page tile counts.
+- `tests/`: `platform.test.ts`, `contract.test.ts`, `approval-triggers.test.ts`, `refunds.test.ts`, `kyc.test.ts`, `ui-format.test.ts`, `setup.ts`.
 
 ## Mapping to Power Apps
 
@@ -43,6 +45,7 @@ Open http://localhost:3000. The header switcher signs in as one of seven seeded 
 | Dataverse table | `src/apps/<app>/schema.ts` |
 | Business rules | Zod schemas and status checks in `src/apps/<app>/service.ts` |
 | Audit history | `audit_events`, append-only by `src/platform/db/triggers.sql` |
+| Model-driven shell | left navigation, command bar, and status labels in `src/components/fluent/` (Fluent UI React v9) |
 | Approvals flow | `src/platform/approvals.ts`, `onDecision` in `src/apps/registry.ts` |
 | Column security | `pii` in `policy.ts`, applied by `src/platform/redact.ts` and list-page masking |
 | Connectors | stubs in `src/platform/integrations/` |
@@ -71,6 +74,13 @@ Open http://localhost:3000. The header switcher signs in as one of seven seeded 
   - the requester cannot decide their own approval
   - deciding an approval twice fails and the denied retries are audited
   - `db:reset` works with no `data/` directory and rewrites a placeholder `SESSION_SECRET`
+- `tests/approval-triggers.test.ts`
+  - an UPDATE that sets `decided_by` to the requester fails, even inside a raw transaction
+  - any UPDATE to a non-pending approval fails, even inside a raw transaction
+- `tests/ui-format.test.ts`
+  - `statusLabel` renders readable labels such as "Pending approval"
+  - `formatDateTime` renders "Oct 18, 2026, 6:25 PM"
+  - `countRows` returns seeded counts for every registered app
 - `tests/contract.test.ts`, for every entry in `src/apps/registry.ts`
   - the policy declares permissions
   - every PII field is a column of the app's table
@@ -84,7 +94,24 @@ Open http://localhost:3000. The header switcher signs in as one of seven seeded 
 - `tests/actions.test.ts`, `tests/auth-actions.test.ts`: decision input validation and same-origin return paths.
 - `tests/kyc-page.test.ts`: one PII-free `read_pii` audit row per KYC detail load.
 
+## Security notes
+
+- `src/platform/db/triggers.sql` makes `audit_events` append-only and rejects, at the database layer, any approval decided by its requester and any update to a non-pending approval.
+- `.github/CODEOWNERS` assigns `src/platform/`, `tests/contract.test.ts`, and `AGENTS.md` to `@devvramesh`.
+- `.github/workflows/ci.yml` runs `npm run db:reset`, `npm run typecheck`, `npm run lint`, and `npm test` on every pull request.
+
 ## How it was built
+
+## Next steps
+
+Planned but not built:
+
+- Lint rules that check code structure instead of text matching for raw database writes
+- Contract-test checks for denied reads and self-approval on every app
+- Auditing refund email views
+- Auditing page-level permission denials
+- Requiring a note on every approval
+- Session expiry
 
 ## What this doesn't do
 
