@@ -3,13 +3,13 @@
 import {
   Button,
   Caption1,
-  Divider,
   Menu,
   MenuItem,
   MenuList,
   MenuPopover,
   MenuTrigger,
   Text,
+  tokens,
 } from "@fluentui/react-components";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -72,17 +72,25 @@ export function NavRail({
       </div>
       <div className="flex flex-1 flex-col gap-0.5 px-2">
         {items.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
           return (
-            <Link key={item.href} href={item.href} className="no-underline">
-              <Button appearance="subtle" className={`w-full justify-start ${active ? "bg-neutral-100 font-semibold" : ""}`}>
+            <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className="no-underline">
+              <Button
+                appearance="subtle"
+                className="w-full"
+                style={{
+                  justifyContent: "flex-start",
+                  backgroundColor: active ? tokens.colorNeutralBackground1Selected : undefined,
+                  color: active ? tokens.colorBrandForeground1 : undefined,
+                  fontWeight: active ? tokens.fontWeightSemibold : undefined,
+                }}
+              >
                 {item.label}
               </Button>
             </Link>
           );
         })}
       </div>
-      <Divider />
       <div className="flex items-center justify-between gap-2 px-3 py-3">
         {user ? (
           <div className="min-w-0">
