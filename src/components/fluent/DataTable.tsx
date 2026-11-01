@@ -18,7 +18,7 @@ export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNod
           {rows.map((cells, i) => (
             <TableRow key={i}>
               {cells.map((cell, j) => (
-                <TableCell key={j}>{cell}</TableCell>
+                <TableCell key={j} style={{ overflowWrap: "anywhere" }}>{cell}</TableCell>
               ))}
             </TableRow>
           ))}
