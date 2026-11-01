@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   agentRules: false,
+  devIndicators: false,
   cacheComponents: false,
   serverExternalPackages: ["better-sqlite3"],
   turbopack: {
