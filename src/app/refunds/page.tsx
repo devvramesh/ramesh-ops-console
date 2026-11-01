@@ -72,7 +72,7 @@ export default async function RefundsPage() {
             <span key="r" className="text-neutral-600">
               {r.reason}
             </span>,
-            <span key="t" className="whitespace-nowrap text-neutral-600">
+            <span key="t" className="text-neutral-600">
               {formatDateTime(r.createdAt)}
             </span>,
           ])}

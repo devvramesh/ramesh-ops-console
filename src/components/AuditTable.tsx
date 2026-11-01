@@ -9,7 +9,7 @@ export function AuditTable({ events, showApp = true }: { events: AuditEvent[]; s
   if (events.length === 0) return <p className="text-sm text-neutral-500">No audit events.</p>;
   const columns = ["Time", "Actor", "Role", ...(showApp ? ["App"] : []), "Action", "Entity", "Outcome", "Before", "After"];
   const rows = events.map((e) => [
-    <span key="t" className="whitespace-nowrap text-neutral-600">
+    <span key="t" className="text-neutral-600">
       {formatDateTime(e.ts)}
     </span>,
     <span key="a" className={quiet}>
