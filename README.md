@@ -157,7 +157,9 @@ After the two-hour build I added these to prepare the client demo, outside the t
 | PR | What it did | Opened (UTC) | Merged (UTC) |
 | --- | --- | --- | --- |
 | #7 | Database safeguards on approvals, CODEOWNERS, CI, and the Fluent UI restyle | Nov 1, 2026, 9:07 PM | Nov 1, 2026, 9:13 PM |
-| TBD | Feature-flags app | - | - |
+| #8 | Demo user switching ignores invalid user IDs, refunds seeded relative to today, wrapped table text, sidebar alignment with current-section highlight, Next dev indicator disabled | Nov 1, 2026, 9:35 PM | Nov 1, 2026, 9:36 PM |
+| #9 | Feature flags app: admin kill switch, high-risk enables approved by an approver through `decide()`, 8 seeded flags | Nov 1, 2026, 9:50 PM | - |
+| #10 | Sidebar user summary: name above title-cased roles, fixed-size Demo control, top border separating it from navigation | Nov 1, 2026, 9:51 PM | Nov 1, 2026, 9:52 PM |
 | #11 | Finance change request: required refund reason codes and an audited month-end CSV export for approvers and admins | Nov 1, 2026, 9:51 PM | - |
 
 ## Next steps
